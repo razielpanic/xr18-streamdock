@@ -1,0 +1,19 @@
+{
+  "name": "com.youshriek.xr18fx.sdplugin",
+  "version": "1.0.0",
+  "description": "",
+  "main": "xr18fx.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "node-osc": "^11.1.0",
+    "osc-js": "^2.4.1",
+    "osc-min": "^2.1.2",
+    "ws": "^8.18.3"
+  }
+}
