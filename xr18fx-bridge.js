@@ -10,9 +10,19 @@
 //   - Uses ONE UDP socket (dgram) for both send and receive
 //   - Polls XR18 every second for fader + mute state of FX1..4
 //   - For every OSC reply, broadcasts state back to all plugin instances
+//
+// Run with (from plugin folder):
+//   cd /Users/razielpanic/Library/Application Support/HotSpot/StreamDock/plugins/com.youshriek.xr18fx.sdPlugin
+//   node xr18fx-bridge.js
+//
+
 
 const dgram = require('dgram');
 const WebSocket = require('ws');
+
+// Debug flags
+const DEBUG_OSC = false;
+const DEBUG_WS  = false;
 
 // XR18 network settings
 const XR18_IP   = '192.168.1.37';
@@ -300,7 +310,9 @@ function handleOscPacket(buf) {
   const args = msg.args || [];
 
   // For debug: log everything coming from mixer
-  console.log('OSC RAW:', addr, args.map(a => a && a.value));
+  if (DEBUG_OSC) {
+    console.log('OSC RAW:', addr, args.map(a => a && a.value));
+  }
 
   // Handle meter blobs: meters/<set> (optionally with leading slash) with one blob argument
   const mMeters = addr.match(/^\/?meters\/(\d+)$/);
@@ -555,7 +567,9 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    console.log('BRIDGE RECEIVED:', msg);
+    if (DEBUG_WS) {
+      console.log('BRIDGE RECEIVED:', msg);
+    }
 
     if (msg.type === 'log') {
       console.log('PLUGIN LOG:', msg.tag, msg.payload);
