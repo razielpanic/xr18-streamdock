@@ -1,0 +1,33 @@
+{
+  "Name": "XR18 FX Returns",
+  "Author": "You Shriek",
+  "Version": "0.1",
+  "Description": "Control XR18 FX1–FX4 returns using 4 rotary encoders",
+  "Category": "XR18",
+  "Icon": "blank.png",
+  "SDKVersion": 1,
+  "CodePath": "index.html",
+  "Actions": [
+    {
+      "UUID": "com.youshriek.xr18fx",
+      "Name": "XR18 FX Returns",
+      "Controllers": ["Knob"],
+      "States": [
+        {
+          "Image": "blank.png"
+        }
+      ]
+    },
+    {
+      "UUID": "com.youshriek.xr18channel",
+      "Name": "XR18 Channel Button",
+      "Controllers": ["Keypad"],
+      "PropertyInspectorPath": "propertyInspector/channel/index.html",
+      "States": [
+        {
+          "Image": "blank.png"
+        }
+      ]
+    }
+  ]
+}
