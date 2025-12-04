@@ -23,17 +23,14 @@ function setBridgeOnline(next) {
   bridgeOnline = next;
   if (!changed) return;
 
-  // When we transition to offline, force all tiles to redraw so they show OFFLINE/--
-  if (!bridgeOnline) {
-    for (const context of fxInstances.keys()) {
-      updateKnobTitle(context);
-    }
-    for (const context of channelInstances.keys()) {
-      updateChannelTitle(context);
-    }
+  // On any transition (offline or online), force all tiles to redraw
+  // so they can update OFFLINE/-- or resume normal labels/metering.
+  for (const context of fxInstances.keys()) {
+    updateKnobTitle(context);
   }
-  // When transitioning to online, we rely on the bridge to push fresh state,
-  // which will cause updateKnobTitle/updateChannelTitle to be called.
+  for (const context of channelInstances.keys()) {
+    updateChannelTitle(context);
+  }
 }
 
 const BRIDGE_URL = "ws://127.0.0.1:18018"; // Node bridge we will run separately
@@ -73,6 +70,16 @@ function openBridgeWebSocket() {
     setBridgeOnline(true);
     console.log('XR18FX: bridge WebSocket OPEN');
     logViaBridge('bridge_open', {});
+
+    // New protocol-style handshake and full-state request
+    sendToBridge({
+      type: "hello",
+      clientId: pluginUUID || "stream-dock-plugin",
+      protocolVersion: 1,
+    });
+    sendToBridge({
+      type: "requestFullState",
+    });
 
     // Re-sync all FX instances (in case they appeared before the bridge was ready)
     for (const inst of fxInstances.values()) {
@@ -123,32 +130,33 @@ function openBridgeWebSocket() {
 
     if (!msg) return;
 
-    // FX strip state updates
-    if (msg.type === "state" && msg.fx) {
-      // Update any FX instances that correspond to this FX index
-      for (const [context, inst] of fxInstances.entries()) {
-        if (inst.fx !== msg.fx) continue;
+    // FX strip state updates (protocol-style fxState)
+    if (msg.type === "fxState" && msg.fxIndex) {
+      const fxIndex = msg.fxIndex;
 
-        if (msg.kind === "fader" && typeof msg.value === "number") {
-          let v = Math.round(msg.value * 100);
+      for (const [context, inst] of fxInstances.entries()) {
+        if (inst.fx !== fxIndex) continue;
+
+        if (typeof msg.fader === "number") {
+          let v = Math.round(msg.fader * 100);
           if (v < 0) v = 0;
           if (v > 100) v = 100;
           inst.value = v;
         }
 
-        if (msg.kind === "mute") {
-          inst.muted = !!msg.muted;
+        if (typeof msg.mute === "boolean") {
+          inst.muted = msg.mute;
         }
 
-        if (msg.kind === "name" && typeof msg.name === "string") {
+        if (typeof msg.name === "string") {
           const trimmed = msg.name.trim();
           if (trimmed.length > 0) {
             inst.name = trimmed;
           }
         }
 
-        if (msg.kind === "meter" && typeof msg.value === "number") {
-          let m = msg.value;
+        if (typeof msg.meter === "number") {
+          let m = msg.meter;
           if (m < 0) m = 0;
           if (m > 1) m = 1;
           inst.meter = m;
@@ -156,8 +164,10 @@ function openBridgeWebSocket() {
 
         updateKnobTitle(context);
       }
+
       return;
     }
+
 
     // Channel Button state updates
     if (msg.type === "channelState" && msg.targetType && msg.targetIndex) {
@@ -350,10 +360,10 @@ function handleDialRotate(msg) {
   if (inst.value < 0) inst.value = 0;
   if (inst.value > 100) inst.value = 100;
 
-  // Send fader move to bridge as 0.0..1.0
+  // Send fader move to bridge as 0.0..1.0 (protocol-style message)
   sendToBridge({
-    type: "fader",
-    fx: inst.fx,
+    type: "setFxFader",
+    fxIndex: inst.fx,
     value: inst.value / 100,
   });
 
@@ -368,9 +378,9 @@ function handleDialDown(msg) {
   inst.muted = !inst.muted;
 
   sendToBridge({
-    type: "mute",
-    fx: inst.fx,
-    on: inst.muted
+    type: "setFxMute",
+    fxIndex: inst.fx,
+    mute: inst.muted,
   });
 
   updateKnobTitle(context);

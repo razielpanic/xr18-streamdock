@@ -1,8 +1,8 @@
 {
-  "Name": "XR18 FX Returns",
+  "Name": "XR18 Control Surface",
   "Author": "You Shriek",
-  "Version": "0.1",
-  "Description": "Control XR18 FX1–FX4 returns using 4 rotary encoders",
+  "Version": "0.3.0",
+  "Description": "Control XR18 using buttons and rotary encoders",
   "Category": "XR18",
   "Icon": "blank.png",
   "SDKVersion": 1,
@@ -10,7 +10,7 @@
   "Actions": [
     {
       "UUID": "com.youshriek.xr18fx",
-      "Name": "XR18 FX Returns",
+      "Name": "XR18 Control Knob",
       "Controllers": ["Knob"],
       "States": [
         {

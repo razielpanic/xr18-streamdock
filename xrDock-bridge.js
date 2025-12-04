@@ -20,16 +20,42 @@
 const dgram = require('dgram');
 const WebSocket = require('ws');
 
+// Optional shared WebSocket protocol definitions (if present)
+let wsProtocol = {};
+try {
+  wsProtocol = require('./wsProtocol');
+} catch (err) {
+  console.warn('wsProtocol.js not found; using legacy WebSocket message shapes');
+}
+const {
+  MSG_HELLO,
+  MSG_WELCOME,
+  MSG_REQUEST_FULL_STATE,
+  MSG_SET_FX_FADER,
+  MSG_SET_FX_MUTE,
+  MSG_SET_CHANNEL_FADER,
+  MSG_SET_CHANNEL_MUTE,
+  MSG_FX_STATE,
+  MSG_CHANNEL_STATE,
+  MSG_METERS_FRAME,
+  MSG_ERROR,
+  parseMessage,
+} = wsProtocol;
+
 // Debug flags
-const DEBUG_OSC = false;
-const DEBUG_WS  = false;
+const DEBUG_OSC    = false;
+const DEBUG_WS     = false;
+const DEBUG_JSON   = false; // JSON traffic bridge <-> plugin
+const DEBUG_METERS = false; // per-meter logging
 
 // JSON flow logging helpers (plugin <-> bridge)
 function logPluginToBridge(raw) {
+  if (!DEBUG_JSON) return;
   console.log('[PLUGIN → BRIDGE]', raw);
 }
 
 function logBridgeToPlugin(raw) {
+  if (!DEBUG_JSON) return;
   console.log('[BRIDGE → PLUGIN]', raw);
 }
 
@@ -210,20 +236,36 @@ function sendOscInt(address, value) {
 
 // ---- Bridge logic ----
 
-// Broadcast state back to all connected plugin clients
+// Broadcast FX state back to all connected plugin clients (protocol-style)
 function broadcastState(state) {
-  const payload = JSON.stringify({
-    type: 'state',
-    fx: state.fx,
-    kind: state.kind,   // 'fader', 'mute', or 'name'
-    value: state.value, // for fader: 0.0..1.0
-    muted: state.muted, // for mute: boolean
-    name: state.name    // for name: string
-  });
-  logBridgeToPlugin(payload);
+  // Protocol-style FX state message. We send partial updates: only the field that changed.
+  const msg = {
+    type: MSG_FX_STATE || 'fxState',
+    fxIndex: state.fx,
+  };
+
+  if (state.kind === 'fader' && typeof state.value === 'number') {
+    msg.fader = state.value;        // 0.0..1.0
+  }
+  if (state.kind === 'mute' && typeof state.muted === 'boolean') {
+    msg.mute = state.muted;         // boolean
+  }
+  if (state.kind === 'name' && typeof state.name === 'string') {
+    msg.name = state.name;          // string
+  }
+  if (state.kind === 'meter') {
+    // Meters may be passed as state.meter or state.value; accept either.
+    const meter = typeof state.meter === 'number' ? state.meter : state.value;
+    if (typeof meter === 'number') {
+      msg.meter = meter;            // 0.0..1.0
+    }
+  }
+
+  const json = JSON.stringify(msg);
+  logBridgeToPlugin(json);
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
+      client.send(json);
     }
   });
 }
@@ -231,7 +273,7 @@ function broadcastState(state) {
 // Broadcast a generic channel-state update for Channel Button clients
 function broadcastChannelState(state) {
   const payload = JSON.stringify({
-    type: 'channelState',
+    type: MSG_CHANNEL_STATE || 'channelState',
     targetType: state.targetType,
     targetIndex: state.targetIndex,
     muted: state.muted,
@@ -395,8 +437,9 @@ function handleOscPacket(buf) {
         const level = dbToLevel(db, FX_METER_FLOOR_DB);
         const fx = n + 1;
 
-        // Debug log for now
-        console.log(`METER FX${fx}: raw=${raw} dB=${db.toFixed(1)} lvl=${level.toFixed(2)}`);
+        if (DEBUG_METERS) {
+          console.log(`METER FX${fx}: raw=${raw} dB=${db.toFixed(1)} lvl=${level.toFixed(2)}`);
+        }
 
         // Broadcast to plugin as a 'meter' kind; plugin can choose how to render
         broadcastState({
@@ -436,7 +479,9 @@ function handleOscPacket(buf) {
     if (!Number.isNaN(fxName) && fxName >= 1 && fxName <= 4 && args.length > 0) {
       const nameArg = args[0];
       const name = String(nameArg && nameArg.value ? nameArg.value : '').trim();
-      console.log('OSC REPLY NAME:', addr, name);
+      if (DEBUG_OSC) {
+        console.log('OSC REPLY NAME:', addr, name);
+      }
       broadcastState({
         fx: fxName,
         kind: 'name',
@@ -453,7 +498,9 @@ function handleOscPacket(buf) {
     if (!Number.isNaN(chIndex) && chIndex >= 1 && args.length > 0) {
       const nameArg = args[0];
       const name = String(nameArg && nameArg.value ? nameArg.value : '').trim();
-      console.log('OSC REPLY CH NAME:', addr, name);
+      if (DEBUG_OSC) {
+        console.log('OSC REPLY CH NAME:', addr, name);
+      }
 
       // Update registry
       const existing = channelTargets.find(
@@ -480,7 +527,9 @@ function handleOscPacket(buf) {
       const raw = Number(args[0].value);
       const muted = (raw === 0); // XR18: 1 = ON (unmuted), 0 = muted
 
-      console.log('OSC REPLY CH MUTE:', addr, raw);
+      if (DEBUG_OSC) {
+        console.log('OSC REPLY CH MUTE:', addr, raw);
+      }
 
       const existing = channelTargets.find(
         (t) => t.targetType === 'ch' && t.targetIndex === chIndex
@@ -513,7 +562,9 @@ function handleOscPacket(buf) {
     const value = Number(args[0].value);
     if (!Number.isFinite(value)) return;
 
-    console.log('OSC REPLY FADER:', addr, value);
+    if (DEBUG_OSC) {
+      console.log('OSC REPLY FADER:', addr, value);
+    }
     broadcastState({
       fx,
       kind: 'fader',
@@ -525,7 +576,9 @@ function handleOscPacket(buf) {
     // XR18: /mix/on = 1 → channel ON (unmuted), 0 → channel muted
     const muted = (raw === 0);
 
-    console.log('OSC REPLY MUTE:', addr, raw);
+    if (DEBUG_OSC) {
+      console.log('OSC REPLY MUTE:', addr, raw);
+    }
     broadcastState({
       fx,
       kind: 'mute',
@@ -573,10 +626,19 @@ wss.on('connection', (ws) => {
   ws.on('message', (data) => {
     const raw = data.toString();
     logPluginToBridge(raw);
+
     let msg;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
+    if (typeof parseMessage === 'function') {
+      msg = parseMessage(raw);
+    } else {
+      try {
+        msg = JSON.parse(raw);
+      } catch {
+        return;
+      }
+    }
+
+    if (!msg || typeof msg !== 'object') {
       return;
     }
 
@@ -584,8 +646,30 @@ wss.on('connection', (ws) => {
       console.log('BRIDGE RECEIVED:', msg);
     }
 
+    // Protocol-style handshake / high-level requests (if wsProtocol is present)
+    if (msg.type === MSG_HELLO) {
+      if (MSG_WELCOME) {
+        ws.send(JSON.stringify({
+          type: MSG_WELCOME,
+          protocolVersion: 1,
+        }));
+      }
+      return;
+    }
+
+    if (msg.type === MSG_REQUEST_FULL_STATE) {
+      // For now, "full state" = poll FX + registered channels; OSC replies will be broadcast.
+      pollAllFx();
+      pollChannelTargets();
+      return;
+    }
+
+    // Existing / legacy message types below ----------------------------
+
     if (msg.type === 'log') {
-      console.log('PLUGIN LOG:', msg.tag, msg.payload);
+      if (DEBUG_WS || DEBUG_JSON) {
+        console.log('PLUGIN LOG:', msg.tag, msg.payload);
+      }
       return;
     }
 
@@ -648,6 +732,50 @@ wss.on('connection', (ws) => {
           muted: nextMuted
         });
       }
+      return;
+    }
+
+    // New protocol-style FX control messages, mapping to the same OSC behavior as legacy "fader"/"mute"
+    if (msg.type === MSG_SET_FX_FADER) {
+      let fx = Number(msg.fxIndex ?? msg.fx);
+      if (!Number.isFinite(fx) || fx < 1 || fx > 4) return;
+
+      let v = Number(msg.value);
+      if (!Number.isFinite(v)) return;
+      if (v < 0) v = 0;
+      if (v > 1) v = 1;
+
+      console.log('SEND OSC FADER:', fxPath(fx, 'mix/fader'), v);
+      sendOscFloat(fxPath(fx, 'mix/fader'), v);
+
+      // Echo state immediately so UI feels responsive
+      broadcastState({
+        fx,
+        kind: 'fader',
+        value: v
+      });
+      return;
+    }
+
+    if (msg.type === MSG_SET_FX_MUTE) {
+      let fx = Number(msg.fxIndex ?? msg.fx);
+      if (!Number.isFinite(fx) || fx < 1 || fx > 4) return;
+
+      const muted = !!msg.mute;
+      // XR18 logic is reversed:
+      // /mix/on = 1 → channel ON (unmuted)
+      // /mix/on = 0 → channel muted
+      const xrOn = muted ? 0 : 1;
+
+      console.log('SEND OSC MUTE:', fxPath(fx, 'mix/on'), xrOn);
+      sendOscInt(fxPath(fx, 'mix/on'), xrOn);
+
+      // Echo mute state immediately using plugin-style boolean
+      broadcastState({
+        fx,
+        kind: 'mute',
+        muted
+      });
       return;
     }
 
