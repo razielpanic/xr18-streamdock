@@ -15,8 +15,176 @@ let nextFxIndex = 1; // FX1..FX4 in appearance order
 let sdSocket = null;
 let pluginUUID = null;
 let bridgeSocket = null;
+let bridgeReconnectTimer = null;
+let bridgeOnline = false;
+
+function setBridgeOnline(next) {
+  const changed = bridgeOnline !== next;
+  bridgeOnline = next;
+  if (!changed) return;
+
+  // When we transition to offline, force all tiles to redraw so they show OFFLINE/--
+  if (!bridgeOnline) {
+    for (const context of fxInstances.keys()) {
+      updateKnobTitle(context);
+    }
+    for (const context of channelInstances.keys()) {
+      updateChannelTitle(context);
+    }
+  }
+  // When transitioning to online, we rely on the bridge to push fresh state,
+  // which will cause updateKnobTitle/updateChannelTitle to be called.
+}
 
 const BRIDGE_URL = "ws://127.0.0.1:18018"; // Node bridge we will run separately
+
+const BRIDGE_RECONNECT_DELAY_MS = 1500;
+
+function scheduleBridgeReconnect(delayMs) {
+  if (bridgeReconnectTimer) {
+    clearTimeout(bridgeReconnectTimer);
+    bridgeReconnectTimer = null;
+  }
+  bridgeReconnectTimer = setTimeout(() => {
+    bridgeReconnectTimer = null;
+    openBridgeWebSocket();
+  }, typeof delayMs === "number" ? delayMs : BRIDGE_RECONNECT_DELAY_MS);
+}
+
+function openBridgeWebSocket() {
+  // Avoid duplicate connections if one is already open or connecting
+  if (bridgeSocket &&
+      (bridgeSocket.readyState === WebSocket.OPEN ||
+       bridgeSocket.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+
+  console.log('XR18FX: attempting bridge WebSocket connect', BRIDGE_URL);
+  try {
+    bridgeSocket = new WebSocket(BRIDGE_URL);
+  } catch (e) {
+    console.log('XR18FX: bridge WebSocket constructor failed', e);
+    setBridgeOnline(false);
+    scheduleBridgeReconnect();
+    return;
+  }
+
+  bridgeSocket.onopen = () => {
+    setBridgeOnline(true);
+    console.log('XR18FX: bridge WebSocket OPEN');
+    logViaBridge('bridge_open', {});
+
+    // Re-sync all FX instances (in case they appeared before the bridge was ready)
+    for (const inst of fxInstances.values()) {
+      if (typeof inst.fx === "number") {
+        sendToBridge({
+          type: "sync",
+          fx: inst.fx
+        });
+      }
+    }
+
+    // Re-register all Channel Button instances so the bridge can poll them
+    for (const inst of channelInstances.values()) {
+      if (!inst.targetType || !inst.targetIndex) continue;
+      sendToBridge({
+        type: "channelRegister",
+        targetType: inst.targetType,
+        targetIndex: inst.targetIndex,
+      });
+    }
+  };
+
+  bridgeSocket.onerror = (err) => {
+    console.log('XR18FX: bridge WebSocket ERROR', err);
+    logViaBridge('bridge_error', { error: String(err) });
+    setBridgeOnline(false);
+    // onclose will handle scheduling reconnect
+  };
+
+  bridgeSocket.onclose = () => {
+    setBridgeOnline(false);
+    console.log('XR18FX: bridge WebSocket CLOSED');
+    logViaBridge('bridge_closed', {});
+    scheduleBridgeReconnect();
+  };
+
+  // Listen for state updates coming back from the bridge (OSC → bridge → plugin)
+  bridgeSocket.onmessage = (evt) => {
+    let msg;
+    try {
+      msg = JSON.parse(evt.data);
+    } catch (e) {
+      return;
+    }
+
+    // Debug: confirm we are receiving messages from the bridge
+    logViaBridge('bridge-onmessage', msg);
+
+    if (!msg) return;
+
+    // FX strip state updates
+    if (msg.type === "state" && msg.fx) {
+      // Update any FX instances that correspond to this FX index
+      for (const [context, inst] of fxInstances.entries()) {
+        if (inst.fx !== msg.fx) continue;
+
+        if (msg.kind === "fader" && typeof msg.value === "number") {
+          let v = Math.round(msg.value * 100);
+          if (v < 0) v = 0;
+          if (v > 100) v = 100;
+          inst.value = v;
+        }
+
+        if (msg.kind === "mute") {
+          inst.muted = !!msg.muted;
+        }
+
+        if (msg.kind === "name" && typeof msg.name === "string") {
+          const trimmed = msg.name.trim();
+          if (trimmed.length > 0) {
+            inst.name = trimmed;
+          }
+        }
+
+        if (msg.kind === "meter" && typeof msg.value === "number") {
+          let m = msg.value;
+          if (m < 0) m = 0;
+          if (m > 1) m = 1;
+          inst.meter = m;
+        }
+
+        updateKnobTitle(context);
+      }
+      return;
+    }
+
+    // Channel Button state updates
+    if (msg.type === "channelState" && msg.targetType && msg.targetIndex) {
+      const tType = msg.targetType;
+      const tIndex = msg.targetIndex;
+      for (const [context, inst] of channelInstances.entries()) {
+        if (inst.targetType !== tType || inst.targetIndex !== tIndex) continue;
+
+        if (typeof msg.muted === "boolean") {
+          inst.muted = msg.muted;
+        }
+        if (typeof msg.meter === "number") {
+          let m = msg.meter;
+          if (m < 0) m = 0;
+          if (m > 1) m = 1;
+          inst.meter = m;
+        }
+        if (typeof msg.name === "string" && msg.name.trim().length > 0) {
+          inst.name = msg.name.trim();
+        }
+
+        updateChannelTitle(context);
+      }
+      return;
+    }
+  };
+}
 
 function logViaBridge(tag, payload) {
   if (!bridgeSocket || bridgeSocket.readyState !== WebSocket.OPEN) return;
@@ -47,117 +215,8 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
     };
     sdSocket.send(JSON.stringify(registration));
 
-    // Also connect to our local Node OSC bridge
-    console.log('XR18FX: attempting bridge WebSocket connect', BRIDGE_URL);
-    bridgeSocket = new WebSocket(BRIDGE_URL);
-    bridgeSocket.onopen = () => {
-      console.log('XR18FX: bridge WebSocket OPEN');
-      logViaBridge('bridge_open', {});
-
-      // Re-sync all FX instances (in case they appeared before the bridge was ready)
-      for (const inst of fxInstances.values()) {
-        if (typeof inst.fx === "number") {
-          sendToBridge({
-            type: "sync",
-            fx: inst.fx
-          });
-        }
-      }
-
-      // Re-register all Channel Button instances so the bridge can poll them
-      for (const inst of channelInstances.values()) {
-        if (!inst.targetType || !inst.targetIndex) continue;
-        sendToBridge({
-          type: "channelRegister",
-          targetType: inst.targetType,
-          targetIndex: inst.targetIndex,
-        });
-      }
-    };
-    bridgeSocket.onerror = (err) => {
-      console.log('XR18FX: bridge WebSocket ERROR', err);
-      logViaBridge('bridge_error', { error: String(err) });
-    };
-    bridgeSocket.onclose = () => {
-      console.log('XR18FX: bridge WebSocket CLOSED');
-      logViaBridge('bridge_closed', {});
-    };
-
-    // Listen for state updates coming back from the bridge (OSC → bridge → plugin)
-    bridgeSocket.onmessage = (evt) => {
-      let msg;
-      try {
-        msg = JSON.parse(evt.data);
-      } catch (e) {
-        return;
-      }
-
-      // Debug: confirm we are receiving messages from the bridge
-      logViaBridge('bridge-onmessage', msg);
-
-      if (!msg) return;
-
-      // FX strip state updates
-      if (msg.type === "state" && msg.fx) {
-        // Update any FX instances that correspond to this FX index
-        for (const [context, inst] of fxInstances.entries()) {
-          if (inst.fx !== msg.fx) continue;
-
-          if (msg.kind === "fader" && typeof msg.value === "number") {
-            let v = Math.round(msg.value * 100);
-            if (v < 0) v = 0;
-            if (v > 100) v = 100;
-            inst.value = v;
-          }
-
-          if (msg.kind === "mute") {
-            inst.muted = !!msg.muted;
-          }
-
-          if (msg.kind === "name" && typeof msg.name === "string") {
-            const trimmed = msg.name.trim();
-            if (trimmed.length > 0) {
-              inst.name = trimmed;
-            }
-          }
-
-          if (msg.kind === "meter" && typeof msg.value === "number") {
-            let m = msg.value;
-            if (m < 0) m = 0;
-            if (m > 1) m = 1;
-            inst.meter = m;
-          }
-
-          updateKnobTitle(context);
-        }
-        return;
-      }
-
-      // Channel Button state updates
-      if (msg.type === "channelState" && msg.targetType && msg.targetIndex) {
-        const tType = msg.targetType;
-        const tIndex = msg.targetIndex;
-        for (const [context, inst] of channelInstances.entries()) {
-          if (inst.targetType !== tType || inst.targetIndex !== tIndex) continue;
-
-          if (typeof msg.muted === "boolean") {
-            inst.muted = msg.muted;
-          }
-          if (typeof msg.meter === "number") {
-            let m = msg.meter;
-            if (m < 0) m = 0;
-            if (m > 1) m = 1;
-            inst.meter = m;
-          }
-          if (typeof msg.name === "string" && msg.name.trim().length > 0) {
-            inst.name = msg.name.trim();
-          }
-
-          updateChannelTitle(context);
-        }
-        return;
-      }
-    };
+    // Also connect to our local Node OSC bridge (with reconnect support)
+    openBridgeWebSocket();
   };
 
   sdSocket.onmessage = (evt) => {
@@ -224,6 +283,11 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
   sdSocket.onclose = () => {
     sdSocket = null;
     bridgeSocket = null;
+    setBridgeOnline(false);
+    if (bridgeReconnectTimer) {
+      clearTimeout(bridgeReconnectTimer);
+      bridgeReconnectTimer = null;
+    }
   };
 }
 
@@ -481,8 +545,8 @@ function updateKnobTitle(context) {
   const WIDTH_METER = 25; // logical width of the meter bar (can be adjusted independently)
 
   // Per-FX horizontal padding in spaces to visually nudge the whole block
-  const fxPadLeft  = { 1: 0, 2: 0, 3: 5, 4: 12 };
-  const fxPadRight = { 1: 12, 2: 0, 3: 0, 4: 0 };
+  const fxPadLeft  = { 1: 0, 2: 0, 3: 5, 4: 5 };
+  const fxPadRight = { 1: 5, 2: 0, 3: 0, 4: 0 };
 
   const padLeftCount  = fxPadLeft[inst.fx]  || 0;
   const padRightCount = fxPadRight[inst.fx] || 0;
@@ -499,11 +563,18 @@ function updateKnobTitle(context) {
   const meterBar = squareMeter(meter01, WIDTH_METER);
 
   // Build three lines:
-  //  1: name + MUTE or dB
+  //  1: name + MUTE or dB (or OFFLINE)
   //  2: fader bar
   //  3: live meter bar
-  const nameCore = inst.name || `FX${inst.fx}`;
-  const statusCore = inst.muted ? `MUTE` : `${db.toFixed(1)} dB`;
+  const isOffline = !bridgeOnline;
+
+  const nameCore = isOffline
+    ? "--"
+    : (inst.name || `FX${inst.fx}`);
+
+  const statusCore = isOffline
+    ? "OFFLINE"
+    : (inst.muted ? `MUTE` : `${db.toFixed(1)} dB`);
   const line1Core = `${nameCore} ${statusCore}`;
   const line2Core = faderBar;
   const line3Core = meterBar;
@@ -531,8 +602,16 @@ function updateChannelTitle(context) {
   const inst = channelInstances.get(context);
   if (!inst) return;
 
-  const nameCore = inst.name || `${inst.targetType.toUpperCase()}${String(inst.targetIndex).padStart(2, "0")}`;
-  const statusCore = inst.muted ? "OFF" : "ON";
+  const isOffline = !bridgeOnline;
+
+  const nameCore = isOffline
+    ? "--"
+    : (inst.name || `${inst.targetType.toUpperCase()}${String(inst.targetIndex).padStart(2, "0")}`);
+
+  const statusCore = isOffline
+    ? "OFFLINE"
+    : (inst.muted ? "OFF" : "ON");
+
   const meterBar = squareMeter(typeof inst.meter === "number" ? inst.meter : 0, 16);
 
   const line1 = nameCore;
