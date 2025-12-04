@@ -4,7 +4,7 @@
 
 - Renamed core plugin/bridge and manifest/launcher paths from `xr18fx*.js` to `xrDock*.js` 
 - Consolidated FX and channel messaging on explicit protocol types: FX now uses `fxState`/`setFxFader`/`setFxMute`, and the Channel Button uses `channelState`, instead of the generic `state` + `kind` shape.
-- Aligned runtime traffic with `wsProtocol.js` so each entity (FX vs channel) has a clear, separate state shape that is easier to reason about and extend.
+- Introduced `wsProtocol.js` at the plugin root as the single source of truth for WebSocket message types/shapes, and aligned runtime traffic so each entity (FX vs channel) has a clear, separate state shape that is easier to reason about and extend.
 
 ## v0.2.0 — Reconnect + Offline Indicators
 ...
