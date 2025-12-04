@@ -15,3 +15,8 @@ yarn-error.log*
 # Build / artifacts (if you ever add any)
 dist/
 build/
+
+# Xcode user state / breakpoints
+**/xcuserdata/
+*.xcuserstate
+*.xcbkptlist
