@@ -24,6 +24,15 @@ const WebSocket = require('ws');
 const DEBUG_OSC = false;
 const DEBUG_WS  = false;
 
+// JSON flow logging helpers (plugin <-> bridge)
+function logPluginToBridge(raw) {
+  console.log('[PLUGIN → BRIDGE]', raw);
+}
+
+function logBridgeToPlugin(raw) {
+  console.log('[BRIDGE → PLUGIN]', raw);
+}
+
 // XR18 network settings
 const XR18_IP   = '192.168.1.37';
 const XR18_PORT = 10024;
@@ -211,6 +220,7 @@ function broadcastState(state) {
     muted: state.muted, // for mute: boolean
     name: state.name    // for name: string
   });
+  logBridgeToPlugin(payload);
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(payload);
@@ -228,6 +238,7 @@ function broadcastChannelState(state) {
     meter: state.meter,
     name: state.name
   });
+  logBridgeToPlugin(payload);
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(payload);
@@ -560,9 +571,11 @@ udp.bind(LOCAL_OSC_PORT);
 wss.on('connection', (ws) => {
   console.log('BRIDGE: plugin WebSocket connected');
   ws.on('message', (data) => {
+    const raw = data.toString();
+    logPluginToBridge(raw);
     let msg;
     try {
-      msg = JSON.parse(data.toString());
+      msg = JSON.parse(raw);
     } catch {
       return;
     }
