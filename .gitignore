@@ -1,10 +1,17 @@
-# macOS cruft
-.DS_Store
-
-# Node
+# Node / JS
 node_modules/
 npm-debug.log*
-.yarn-cache/
-
-# Logs
+yarn-error.log*
 *.log
+
+# macOS
+.DS_Store
+
+# Editor / IDE
+*.swp
+*.swo
+*.tmp
+
+# Build / artifacts (if you ever add any)
+dist/
+build/
