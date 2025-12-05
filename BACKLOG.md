@@ -6,6 +6,7 @@ ID prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup
 |---------|-------------------------------------------------|----|------|---------|-------|
 | XD-F001 | Finish tile channel configuration               | P1 | feat | next    | Each Channel Button/FX tile can target any XR18 source (ch/bus/FX) with persistent mapping. |
 | XD-T002 | Meter decoding module                           | P2 | tech | backlog | Dedicated module that decodes `/meters/1` into per-channel levels with smoothing/raised floor. |
+| XD-F002 | Bridge starts up active                         | P1 | feat | next    | swiftbar should start the bridge when the mac starts up |
 
 ## 2. Feature backlog
 
