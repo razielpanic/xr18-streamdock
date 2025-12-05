@@ -154,9 +154,8 @@
 		E05539AE2EE1F8EA0034B43C /* index.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = index.js; sourceTree = "<group>"; };
 		E05539B12EE1F8EA0034B43C /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = README.md; path = ../README.md; sourceTree = SOURCE_ROOT; };
 		E05539B22EE1F8EA0034B43C /* xr18channel.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = xr18channel.js; path = ../xr18channel.js; sourceTree = SOURCE_ROOT; };
-		E05539B32EE1F8EA0034B43C /* xr18fx.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = xr18fx.js; path = ../xr18fx.js; sourceTree = SOURCE_ROOT; };
-		E05539B42EE1F8EA0034B43C /* xr18fx-bridge.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = "xr18fx-bridge.js"; path = "../xr18fx-bridge.js"; sourceTree = SOURCE_ROOT; };
 		E05539B62EE2092F0034B43C /* XR18Bridge.10s.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = XR18Bridge.10s.sh; sourceTree = "<group>"; };
+		E06894F82EE361FA00DA85B2 /* BACKLOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = BACKLOG.md; path = ../BACKLOG.md; sourceTree = SOURCE_ROOT; };
 		E08C04AB2EE213300061F0FF /* wsProtocol.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = wsProtocol.js; path = ../wsProtocol.js; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -165,6 +164,7 @@
 			isa = PBXGroup;
 			children = (
 				E05539082EE1F8EA0034B43C /* blank.png */,
+				E06894F82EE361FA00DA85B2 /* BACKLOG.md */,
 				E05539092EE1F8EA0034B43C /* CHANGELOG.md */,
 				E05539132EE1F8EA0034B43C /* cruftGPT */,
 				E05539142EE1F8EA0034B43C /* index.html */,
@@ -175,8 +175,6 @@
 				E05539B02EE1F8EA0034B43C /* propertyInspector */,
 				E05539B12EE1F8EA0034B43C /* README.md */,
 				E05539B22EE1F8EA0034B43C /* xr18channel.js */,
-				E05539B32EE1F8EA0034B43C /* xr18fx.js */,
-				E05539B42EE1F8EA0034B43C /* xr18fx-bridge.js */,
 				E00BF8032EE2427E0085766F /* xrDock.js */,
 				E00BF8042EE2427E0085766F /* xrDock-bridge.js */,
 				E08C04AB2EE213300061F0FF /* wsProtocol.js */,
