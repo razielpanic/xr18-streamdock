@@ -12,9 +12,11 @@ ID prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup
 
 | ID     | Title                                            | Pr | Notes |
 |--------|--------------------------------------------------|----|-------|
-| XD-F002 | FX knob UI refinements                          | P2 | we can definiely fit another line or so. refine layout for clarity of numeric value |
+| XD-F011 | Meter signal-present indicator                  | P2 | Add a minimal “signal present” cue at the very bottom of the dotmeter so activity is visible even with a raised floor / hidden low range (e.g. a baseline pixel/LED that lights whenever recent signal exceeds the noise floor). |
+| XD-F012 | Channel Button on-air indicator graphic         | P1 | Split out from XD-F001: when a Channel Button tile is unmuted, show a strong “on-air” state (e.g. green backlight / alternate graphic) so it’s obvious the channel is live; first non-text-only tile graphic swap. |
+| XD-F010 | FX knob UI refinements                          | P2 | we can definiely fit another line or so. refine layout for clarity of numeric value |
 | XD-F004 | Basic level faders for key inputs               | P4 | A page where encoders act as faders for mapped channels and buttons reflect ch info and bank switching or sends. |
-| XD-F005 | Global “safe state” indicator                   | P1 | Distinguish LIVE / STALE / OFFLINE states based on OSC/WebSocket heartbeats. LIVE: meters updating normally. STALE: meters frozen/dim after a timeout but last-known values still shown. OFFLINE: clear banner/indicator and no control changes sent. On initial connect, fetch XR18 state and update UI without pushing unsolicited changes back to the mixer. |
+| XD-F005 | Global “safe state” indicator                   | P3 | Distinguish LIVE / STALE / OFFLINE states based on OSC/WebSocket heartbeats. LIVE: meters updating normally. STALE: meters frozen/dim after a timeout but last-known values still shown. OFFLINE: clear banner/indicator and no control changes sent. On initial connect, fetch XR18 state and update UI without pushing unsolicited changes back to the mixer. |
 | XD-F006 | Per-action configuration UI                     | P3 | For each action: source selector (Ch 1–18, Bus, FX), label override, meter mode (normal/raised-floor/peaks). |
 | XD-F007 | Global settings screen                          | P4 | Bridge host/port, meter update rate, and option to disable meters on low-power setups. |
 | XD-F009 | Configurable channel layout                     | P4 | Simple JSON or similar mapping so layout isn’t hard-coded (e.g. which XR18 source each tile represents). |
