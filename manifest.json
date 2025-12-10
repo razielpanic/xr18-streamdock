@@ -26,6 +26,9 @@
       "States": [
         {
           "Image": "blank.png"
+        },
+        {
+          "Image": "channel_on.png"
         }
       ]
     }

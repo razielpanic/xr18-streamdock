@@ -4,12 +4,9 @@
 
 PLUGIN_DIR="/Users/razielpanic/Library/Application Support/HotSpot/StreamDock/plugins/com.youshriek.xr18fx.sdPlugin"
 LOG_FILE="$HOME/Library/Logs/xrDock-bridge.log"
+DISABLE_FILE="$HOME/Library/Application Support/HotSpot/xrDock-bridge.disabled"
 
-is_running() {
-  pgrep -f "node .*xrDock-bridge.js" >/dev/null 2>&1
-}
-
-if [[ "$1" == "start" ]]; then
+start_bridge() {
   if ! is_running; then
     # Ensure log directory exists and truncate log on each start
     mkdir -p "$(dirname "$LOG_FILE")"
@@ -17,12 +14,32 @@ if [[ "$1" == "start" ]]; then
     cd "$PLUGIN_DIR" || exit 0
     "/opt/homebrew/bin/node" xrDock-bridge.js >>"$LOG_FILE" 2>&1 &
   fi
+}
+
+is_running() {
+  pgrep -f "node .*xrDock-bridge.js" >/dev/null 2>&1
+}
+
+is_disabled() {
+  [[ -f "$DISABLE_FILE" ]]
+}
+
+if [[ "$1" == "start" ]]; then
+  rm -f "$DISABLE_FILE"
+  start_bridge
   exit 0
 fi
 
 if [[ "$1" == "stop" ]]; then
+  mkdir -p "$(dirname "$DISABLE_FILE")"
+  : >"$DISABLE_FILE"
   pkill -f "node .*xrDock-bridge.js" >/dev/null 2>&1
   exit 0
+fi
+
+# Ensure bridge is running on refresh/login unless explicitly disabled
+if ! is_disabled && ! is_running; then
+  start_bridge
 fi
 
 # Menu output
