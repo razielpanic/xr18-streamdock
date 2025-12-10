@@ -607,6 +607,18 @@ function updateKnobTitle(context) {
   sdSocket.send(JSON.stringify(payload));
 }
 
+function setState(context, state) {
+  if (!sdSocket) return;
+  const payload = {
+    event: "setState",
+    context,
+    payload: {
+      state,
+    },
+  };
+  sdSocket.send(JSON.stringify(payload));
+}
+
 function updateChannelTitle(context) {
   if (!sdSocket) return;
   const inst = channelInstances.get(context);
@@ -618,14 +630,17 @@ function updateChannelTitle(context) {
     ? "--"
     : (inst.name || `${inst.targetType.toUpperCase()}${String(inst.targetIndex).padStart(2, "0")}`);
 
-  const statusCore = isOffline
+  const isOnAir = !isOffline && !inst.muted;
+  const statusLine = isOffline
     ? "OFFLINE"
-    : (inst.muted ? "OFF" : "ON");
+    : (isOnAir ? "ON" : "OFF");
+
+  const stateIndex = isOnAir ? 1 : 0;
 
   const meterBar = squareMeter(typeof inst.meter === "number" ? inst.meter : 0, 16);
 
   const line1 = nameCore;
-  const line2 = statusCore;
+  const line2 = statusLine;
   const line3 = meterBar;
 
   const title = `${line1}\n${line2}\n${line3}`;
@@ -640,6 +655,9 @@ function updateChannelTitle(context) {
   };
 
   sdSocket.send(JSON.stringify(payload));
+
+  // Swap visual state based on on-air status (state 0 = OFF/blank, state 1 = ON/green glow).
+  setState(context, stateIndex);
 }
 
 function sendToBridge(msg) {

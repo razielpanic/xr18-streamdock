@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.1 — Bridge auto-start + on-air indicator
+- Added SwiftBar-based auto-start for the XR18 bridge on login, with an explicit disable flag so the bridge can be stopped and kept down when needed.
+- Updated Channel Button tiles to show a clear on-air state (green glow + `ON` text when unmuted, `OFF` when muted, and `OFFLINE` when the bridge is disconnected).
+- Ensured manifest and plugin state wiring support per-state images for Channel Buttons and removed the unused `xr18channel.js` file.
+
 ## v0.3.0 — xrDock rename + FX protocol consolidation
 - Renamed core plugin/bridge and manifest/launcher paths from `xr18fx*.js` to `xrDock*.js` 
 - Consolidated FX and channel messaging on explicit protocol types: FX now uses `fxState`/`setFxFader`/`setFxMute`, and the Channel Button uses `channelState`, instead of the generic `state` + `kind` shape.

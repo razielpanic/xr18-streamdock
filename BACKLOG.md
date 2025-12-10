@@ -6,14 +6,12 @@ ID prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup
 |---------|-------------------------------------------------|----|------|---------|-------|
 | XD-F001 | Finish tile channel configuration               | P1 | feat | next    | Each Channel Button/FX tile can target any XR18 source (ch/bus/FX) with persistent mapping. |
 | XD-T002 | Meter decoding module                           | P2 | tech | backlog | Dedicated module that decodes `/meters/1` into per-channel levels with smoothing/raised floor. |
-| XD-F002 | Bridge starts up active                         | P1 | feat | next    | swiftbar should start the bridge when the mac starts up |
 
 ## 2. Feature backlog
 
 | ID     | Title                                            | Pr | Notes |
 |--------|--------------------------------------------------|----|-------|
 | XD-F011 | Meter signal-present indicator                  | P2 | Add a minimal “signal present” cue at the very bottom of the dotmeter so activity is visible even with a raised floor / hidden low range (e.g. a baseline pixel/LED that lights whenever recent signal exceeds the noise floor). |
-| XD-F012 | Channel Button on-air indicator graphic         | P1 | Split out from XD-F001: when a Channel Button tile is unmuted, show a strong “on-air” state (e.g. green backlight / alternate graphic) so it’s obvious the channel is live; first non-text-only tile graphic swap. |
 | XD-F010 | FX knob UI refinements                          | P2 | we can definiely fit another line or so. refine layout for clarity of numeric value |
 | XD-F004 | Basic level faders for key inputs               | P4 | A page where encoders act as faders for mapped channels and buttons reflect ch info and bank switching or sends. |
 | XD-F005 | Global “safe state” indicator                   | P3 | Distinguish LIVE / STALE / OFFLINE states based on OSC/WebSocket heartbeats. LIVE: meters updating normally. STALE: meters frozen/dim after a timeout but last-known values still shown. OFFLINE: clear banner/indicator and no control changes sent. On initial connect, fetch XR18 state and update UI without pushing unsolicited changes back to the mixer. |
@@ -39,9 +37,10 @@ Capture what you expected, what actually happened, and how to reproduce.
 | XD-T006 | Unit tests around meter decoding                | P2 | backlog | Sample `/meters/1` blobs mapped to expected per-channel levels to guard against regressions. |
 | XD-T007 | Refactor bridge into smaller modules            | P2 | backlog | Split bridge into OSC transport, WebSocket transport, protocol/schema, and app entrypoint modules. |
 
-
 ## 5. Done (for future changelog)
 
+- 2025-12-09 – XD-F012: Channel Button on-air indicator graphic (Channel Button tiles now show an on-air green glow and ON/LIVE text when unmuted, OFF SAFE when muted, and OFFLINE when the bridge is down).
+- 2025-12-09 – XD-F002: Bridge starts up active (SwiftBar plugin now auto-starts the bridge on login and keeps it running unless explicitly disabled via the menu).
 - 2025-12-04 – XD-F003: FX returns control surface (bi-directional control of FX return fader, mute, name, and meters).
 - 2025-12-04 – XD-T001: Explicit OSC session lifecycle handling (`/xremote` + `/renew`, reconnect logic, and connection state exposed to plugin).
 - 2025-12-04 – XD-F008: Graceful “no bridge” behaviour (tiles indicate offline state instead of failing silently).

@@ -1,5 +1,3 @@
-
-
 // xr18channel.js
 // XR18 "Channel Button" action: mono strip with ON/OFF + meter, no fader control.
 
@@ -63,6 +61,16 @@ function setTitle(context, title) {
     payload: {
       title,
       target: 0,
+    },
+  });
+}
+
+function setState(context, state) {
+  sendToSd({
+    event: 'setState',
+    context,
+    payload: {
+      state,
     },
   });
 }
@@ -247,12 +255,18 @@ function updateChannelTitle(context) {
 
   const nameCore = inst.name || `${inst.targetType.toUpperCase()}${String(inst.targetIndex).padStart(2, '0')}`;
   const statusCore = inst.muted ? 'OFF' : 'ON';
+  const isOnAir = !inst.muted;
+  const stateIndex = isOnAir ? 1 : 0;
+  const statusLine = isOnAir ? 'ON  LIVE' : 'OFF SAFE';
   const meterBar = squareMeter(inst.meter, 16);
 
   const line1 = nameCore;
-  const line2 = statusCore;
+  const line2 = statusLine;
   const line3 = meterBar;
 
   const title = `${line1}\n${line2}\n${line3}`;
   setTitle(context, title);
+
+  // Swap visual state based on on-air status (state 0 = OFF/blank, state 1 = ON/green glow).
+  setState(context, stateIndex);
 }
