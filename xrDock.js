@@ -18,6 +18,22 @@ let bridgeSocket = null;
 let bridgeReconnectTimer = null;
 let bridgeOnline = false;
 
+let bridgeSafeState = 'OFFLINE'; // OFFLINE | STALE | LIVE (from bridge)
+
+function setBridgeSafeState(next) {
+  const changed = bridgeSafeState !== next;
+  bridgeSafeState = next;
+  if (!changed) return;
+
+  // Any transition should force redraw across tiles.
+  for (const context of fxInstances.keys()) {
+    updateKnobTitle(context);
+  }
+  for (const context of channelInstances.keys()) {
+    updateChannelTitle(context);
+  }
+}
+
 function setBridgeOnline(next) {
   const changed = bridgeOnline !== next;
   bridgeOnline = next;
@@ -71,6 +87,9 @@ function openBridgeWebSocket() {
     console.log('XR18FX: bridge WebSocket OPEN');
     logViaBridge('bridge_open', {});
 
+    // Conservative: assume STALE until the bridge explicitly reports LIVE.
+    setBridgeSafeState('STALE');
+
     // New protocol-style handshake and full-state request
     sendToBridge({
       type: "hello",
@@ -111,6 +130,7 @@ function openBridgeWebSocket() {
 
   bridgeSocket.onclose = () => {
     setBridgeOnline(false);
+    setBridgeSafeState('OFFLINE');
     console.log('XR18FX: bridge WebSocket CLOSED');
     logViaBridge('bridge_closed', {});
     scheduleBridgeReconnect();
@@ -129,6 +149,12 @@ function openBridgeWebSocket() {
     logViaBridge('bridge-onmessage', msg);
 
     if (!msg) return;
+
+    // Bridge connection/safe-state (OFFLINE | STALE | LIVE)
+    if (msg.type === 'connectionState' && typeof msg.state === 'string') {
+      setBridgeSafeState(msg.state);
+      return;
+    }
 
     // FX strip state updates (protocol-style fxState)
     if (msg.type === "fxState" && msg.fxIndex) {
@@ -353,6 +379,11 @@ function handleDialRotate(msg) {
   const context = msg.context;
   const inst = fxInstances.get(context);
   if (!inst) return;
+  // Do not change local UI state if bridge isn't LIVE (prevents misleading "ghost" moves)
+  if (bridgeSafeState !== 'LIVE') {
+    updateKnobTitle(context);
+    return;
+  }
 
   const ticks = msg.payload && typeof msg.payload.ticks === "number" ? msg.payload.ticks : 0;
 
@@ -374,6 +405,11 @@ function handleDialDown(msg) {
   const context = msg.context;
   const inst = fxInstances.get(context);
   if (!inst) return;
+  // Do not toggle local mute if bridge isn't LIVE
+  if (bridgeSafeState !== 'LIVE') {
+    updateKnobTitle(context);
+    return;
+  }
 
   inst.muted = !inst.muted;
 
@@ -442,6 +478,11 @@ function handleChannelKeyDown(msg) {
   const context = msg.context;
   const inst = channelInstances.get(context);
   if (!inst) return;
+  // Do not toggle local state if bridge isn't LIVE
+  if (bridgeSafeState !== 'LIVE') {
+    updateChannelTitle(context);
+    return;
+  }
 
   // Tap toggles mute
   sendToBridge({
@@ -576,7 +617,8 @@ function updateKnobTitle(context) {
   //  1: name + MUTE or dB (or OFFLINE)
   //  2: fader bar
   //  3: live meter bar
-  const isOffline = !bridgeOnline;
+  const isOffline = (!bridgeOnline || bridgeSafeState === 'OFFLINE');
+  const isStale = (!isOffline && bridgeSafeState === 'STALE');
 
   const nameCore = isOffline
     ? "--"
@@ -584,7 +626,7 @@ function updateKnobTitle(context) {
 
   const statusCore = isOffline
     ? "OFFLINE"
-    : (inst.muted ? `MUTE` : `${db.toFixed(1)} dB`);
+    : (isStale ? "STALE" : (inst.muted ? `MUTE` : `${db.toFixed(1)} dB`));
   const line1Core = `${nameCore} ${statusCore}`;
   const line2Core = faderBar;
   const line3Core = meterBar;
@@ -623,8 +665,8 @@ function updateChannelTitle(context) {
   if (!sdSocket) return;
   const inst = channelInstances.get(context);
   if (!inst) return;
-
-  const isOffline = !bridgeOnline;
+  const isOffline = (!bridgeOnline || bridgeSafeState === 'OFFLINE');
+  const isStale = (!isOffline && bridgeSafeState === 'STALE');
 
   const nameCore = isOffline
     ? "--"
@@ -633,7 +675,7 @@ function updateChannelTitle(context) {
   const isOnAir = !isOffline && !inst.muted;
   const statusLine = isOffline
     ? "OFFLINE"
-    : (isOnAir ? "ON" : "OFF");
+    : (isStale ? "STALE" : (isOnAir ? "ON" : "OFF"));
 
   const stateIndex = isOnAir ? 1 : 0;
 
@@ -664,6 +706,22 @@ function sendToBridge(msg) {
   console.log('XR18FX: sendToBridge', msg, 'readyState=', bridgeSocket && bridgeSocket.readyState);
   logViaBridge('sendToBridge', msg);
   if (!bridgeSocket || bridgeSocket.readyState !== WebSocket.OPEN) return;
+
+  const isControlWrite = (
+    msg && typeof msg === 'object' && (
+      msg.type === 'setFxFader' ||
+      msg.type === 'setFxMute' ||
+      msg.type === 'setChannelFader' ||
+      msg.type === 'setChannelMute' ||
+      msg.type === 'channelToggleMute'
+    )
+  );
+
+  if (isControlWrite && bridgeSafeState !== 'LIVE') {
+    console.log('XR18FX: blocked control write while', bridgeSafeState, msg.type);
+    return;
+  }
+
   try {
     bridgeSocket.send(JSON.stringify(msg));
   } catch (e) {

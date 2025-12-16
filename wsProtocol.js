@@ -15,6 +15,7 @@ const MSG_SET_CHANNEL_MUTE = 'setChannelMute';
 const MSG_FX_STATE = 'fxState';
 const MSG_CHANNEL_STATE = 'channelState';
 const MSG_METERS_FRAME = 'metersFrame';
+const MSG_CONNECTION_STATE = 'connectionState';
 
 const MSG_ERROR = 'error';
 
@@ -78,6 +79,7 @@ module.exports = {
   MSG_FX_STATE,
   MSG_CHANNEL_STATE,
   MSG_METERS_FRAME,
+  MSG_CONNECTION_STATE,
   MSG_ERROR,
   // helpers
   parseMessage,

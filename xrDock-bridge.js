@@ -38,6 +38,7 @@ const {
   MSG_FX_STATE,
   MSG_CHANNEL_STATE,
   MSG_METERS_FRAME,
+  MSG_CONNECTION_STATE,
   MSG_ERROR,
   parseMessage,
 } = wsProtocol;
@@ -47,6 +48,63 @@ const DEBUG_OSC    = false;
 const DEBUG_WS     = false;
 const DEBUG_JSON   = false; // JSON traffic bridge <-> plugin
 const DEBUG_METERS = false; // per-meter logging
+
+// ---- T009: Connection / Safe-State (OFFLINE | STALE | LIVE) ----
+
+const SAFE_OFFLINE = 'OFFLINE';
+const SAFE_STALE   = 'STALE';
+const SAFE_LIVE    = 'LIVE';
+
+// Tunables (ms)
+const OSC_OFFLINE_MS = 4000;   // no OSC packets => OFFLINE
+const OSC_LIVE_MS    = 1500;   // OSC seen recently => candidate for LIVE/STALE
+const METERS_LIVE_MS = 1500;   // meters seen recently => LIVE
+
+let lastOscRxAt = 0;
+let lastMetersRxAt = 0;
+let lastSafeState = SAFE_OFFLINE;
+
+function computeSafeState(now) {
+  const oscAge = lastOscRxAt ? (now - lastOscRxAt) : Infinity;
+  const metersAge = lastMetersRxAt ? (now - lastMetersRxAt) : Infinity;
+
+  if (oscAge >= OSC_OFFLINE_MS) return SAFE_OFFLINE;
+  if (oscAge <= OSC_LIVE_MS && metersAge <= METERS_LIVE_MS) return SAFE_LIVE;
+  return SAFE_STALE;
+}
+
+function broadcastConnectionState(state) {
+  const payload = JSON.stringify({
+    type: MSG_CONNECTION_STATE || 'connectionState',
+    state,
+    lastOscRxAt,
+    lastMetersRxAt,
+  });
+
+  logBridgeToPlugin(payload);
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(payload);
+    }
+  });
+}
+
+function updateAndBroadcastSafeState(now) {
+  const next = computeSafeState(now);
+  if (next !== lastSafeState) {
+    lastSafeState = next;
+    broadcastConnectionState(next);
+  }
+}
+
+function maySendControl() {
+  // Conservative: only allow control writes when fully LIVE.
+  // This prevents “blind writes” when the bridge is STALE/OFFLINE.
+  return lastSafeState === SAFE_LIVE;
+}
+
+// Recompute state on a steady cadence so UI flips to OFFLINE/STALE even if packets stop.
+setInterval(() => updateAndBroadcastSafeState(Date.now()), 250);
 
 // JSON flow logging helpers (plugin <-> bridge)
 function logPluginToBridge(raw) {
@@ -68,6 +126,24 @@ const LOCAL_OSC_PORT = 62058;
 
 // WebSocket port between plugin and bridge
 const BRIDGE_PORT = 18018;
+
+// ---- Meter conversion helpers (used by /meters/1 decoding) ----
+// XR18 meter samples appear to be signed 16-bit values in 1/256 dB units.
+function rawToDb(raw) {
+  return raw / 256.0;
+}
+
+function dbToLevel(db, floorDb) {
+  if (db <= floorDb) return 0;
+  if (db >= 0) return 1;
+  return (db - floorDb) / -floorDb;
+}
+
+// Separate floors for FX tiles vs Channel Button key:
+//  - FX meters: keep a deep floor so you can see more low-level ambience.
+//  - Channel Button meter: raise floor so noise floor doesn't animate.
+const FX_METER_FLOOR_DB = -90;
+const KEY_METER_FLOOR_DB = -60;
 
 // Create single UDP socket
 const udp = dgram.createSocket('udp4');
@@ -354,6 +430,36 @@ function subscribeMeters() {
   pollMeters();
 }
 
+// ---- T002: Meter blob decoding (hardened) ----
+// XR18 meters payload is a blob whose first 4 bytes are a little-endian int32 count,
+// followed by `count` int16 little-endian samples (padded/truncated by packet size).
+function decodeMetersBlob(data) {
+  try {
+    if (!data || data.length < 4) return null;
+    const count = data.readInt32LE(0);
+    if (!Number.isFinite(count) || count <= 0) return null;
+
+    const available = Math.floor((data.length - 4) / 2);
+    const slotCount = Math.min(count, available);
+    if (slotCount <= 0) return null;
+
+    // Defensive cap: if a malformed packet claims huge count, do not allocate excessively.
+    const capped = Math.min(slotCount, 4096);
+    const values = new Int16Array(capped);
+    for (let i = 0; i < capped; i++) {
+      values[i] = data.readInt16LE(4 + i * 2);
+    }
+
+    return { count, slotCount: capped, values };
+  } catch (e) {
+    // Never let meter decoding throw and stall the OSC receive loop.
+    if (DEBUG_METERS || DEBUG_OSC) {
+      console.warn('METER decode failed:', e && e.message ? e.message : e);
+    }
+    return null;
+  }
+}
+
 // Handle incoming OSC packets (we assume XR18 replies as single messages)
 function handleOscPacket(buf) {
   const msg = decodeOscMessage(buf);
@@ -377,38 +483,19 @@ function handleOscPacket(buf) {
     if (!blobArg || blobArg.type !== 'b' || !blobArg.value) return;
 
     const data = blobArg.value; // Buffer with raw meter data
+    // Note meter activity for safe-state
+    lastMetersRxAt = Date.now();
+    updateAndBroadcastSafeState(lastMetersRxAt);
 
     // XR18: /meters/1 blob payload:
     //  - first 4 bytes: little-endian int32 = number of int16 values
     //  - then that many 16-bit little-endian signed meter samples
-    if (data.length < 4) return;
-    const count = data.readInt32LE(0);
-    const available = Math.floor((data.length - 4) / 2);
-    const slotCount = Math.min(count, available);
-    const values = new Array(slotCount);
-    for (let i = 0; i < slotCount; i++) {
-      values[i] = data.readInt16LE(4 + i * 2); // signed LE, skip 4-byte header
-    }
+    const decoded = decodeMetersBlob(data);
+    if (!decoded) return;
+    const values = decoded.values;
 
     if (setIndex === 1) {
       // Convert raw 1/256-dB samples to 0–1 levels
-      function rawToDb(raw) {
-        // 16-bit signed, 1/256 dB; floor at about -128 dB
-        return raw / 256.0;
-      }
-
-      // Separate floors for FX tiles vs Channel Button key:
-      //  - FX meters: keep a deep floor so you can see more low-level ambience.
-      //  - Channel Button meter: raise floor so noise floor doesn't animate.
-      const FX_METER_FLOOR_DB = -90;
-      const KEY_METER_FLOOR_DB = -60;
-
-      function dbToLevel(db, floorDb) {
-        if (db <= floorDb) return 0;
-        if (db >= 0) return 1;
-        return (db - floorDb) / -floorDb;
-      }
-
       // FX returns are stereo; use L/R pairs and take the max as the meter value.
       // Mapping inferred from capture and behavior:
       //   FX1: indices 18,19
@@ -610,6 +697,8 @@ udp.on('listening', () => {
 });
 
 udp.on('message', (msg /*, rinfo */) => {
+  lastOscRxAt = Date.now();
+  updateAndBroadcastSafeState(lastOscRxAt);
   handleOscPacket(msg);
 });
 
@@ -623,6 +712,9 @@ udp.bind(LOCAL_OSC_PORT);
 // WebSocket handling for plugin messages
 wss.on('connection', (ws) => {
   console.log('BRIDGE: plugin WebSocket connected');
+  // Send current safe-state immediately on connect
+  updateAndBroadcastSafeState(Date.now());
+  broadcastConnectionState(lastSafeState);
   ws.on('message', (data) => {
     const raw = data.toString();
     logPluginToBridge(raw);
@@ -644,6 +736,30 @@ wss.on('connection', (ws) => {
 
     if (DEBUG_WS) {
       console.log('BRIDGE RECEIVED:', msg);
+    }
+
+    // ---- T009 Safe-state gate: block control writes unless LIVE ----
+    // Allow handshake/sync/registration to proceed even if STALE/OFFLINE.
+    const isControlWrite = (
+      msg.type === MSG_SET_FX_FADER ||
+      msg.type === MSG_SET_FX_MUTE ||
+      msg.type === MSG_SET_CHANNEL_FADER ||
+      msg.type === MSG_SET_CHANNEL_MUTE ||
+      msg.type === 'fader' ||
+      msg.type === 'mute' ||
+      msg.type === 'channelToggleMute'
+    );
+
+    if (isControlWrite && !maySendControl()) {
+      const err = {
+        type: MSG_ERROR || 'error',
+        code: 'SAFE_STATE_BLOCK',
+        message: `Control blocked while ${lastSafeState}`,
+      };
+      const json = JSON.stringify(err);
+      logBridgeToPlugin(json);
+      ws.send(json);
+      return;
     }
 
     // Protocol-style handshake / high-level requests (if wsProtocol is present)
