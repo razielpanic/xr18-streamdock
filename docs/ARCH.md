@@ -74,6 +74,7 @@ Unknown or undocumented XR18 behavior must be surfaced, not guessed.
 - Correct-but-delayed is preferable to fast-but-wrong
 
 Reliability and truthfulness take precedence over elegance or abstraction.
+Currently, recovery from XR18 transport loss requires reinitializing the bridge process; automatic transport-level recovery is a planned improvement
 
 ---
 
@@ -85,3 +86,40 @@ Reliability and truthfulness take precedence over elegance or abstraction.
 
 When uncertain, stop and ask. Clarity is always preferred over cleverness.
 
+### Programming Assistant Interaction Model
+
+This project is developed with the assistance of an AI programming assistant.
+
+- The human owner is a **beginner-to-intermediate programmer** in this codebase
+  and relies on the assistant to act as the **primary programmer**.
+- The assistant is expected to:
+  - Propose **small, incremental changes**
+  - Explain *what* is being done and *why*, clearly and briefly
+  - Prefer plans and diffs over large unsolicited code blocks
+- Work should proceed in **explicit steps**:
+  1. Plan
+  2. Confirm
+  3. Implement one small step
+  4. Pause for review
+- When uncertain, the assistant must **ask before acting**, not guess.
+
+These interaction rules are intentional and should be followed throughout development.
+
+## 7. Platform Constraints & Known Limitations
+
+### Stream Dock / VSD Text Rendering
+- Unicode may be supported by the renderer.
+- Literal Unicode characters in JS source are unreliable in the plugin host.
+- If Unicode is used, it must be generated via escapes (\uXXXX) or String.fromCodePoint(...).
+- All non-ASCII UI experiments must be tested on-device.
+
+#### Notes:
+- Future VSD updates *may* improve Unicode support.
+- Workarounds (e.g., custom bitmaps or SVG rendering) may be explored later,
+  but should not be assumed in current implementations.
+
+### Design Decisions Driven by Platform Limits
+- Raised-floor meters and text-based indicators are used instead of graphical glyphs
+  due to VSD rendering constraints.
+- UI clarity and predictability are prioritized over visual richness.
+- These are intentional; don’t propose Unicode/glyph-based UI improvements unless the rendering constraint is explicitly revisited.

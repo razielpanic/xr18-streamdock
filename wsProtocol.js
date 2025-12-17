@@ -36,22 +36,27 @@ const MSG_ERROR = 'error';
  * { type: 'welcome', protocolVersion: 1 }
  * { type: 'fxState',
  *   fxIndex: 1|2|3|4,
- *   fader: number,               // 0.0–1.0
- *   mute: boolean,
- *   name: string,
- *   meterDb: number | null       // e.g. -60..0, null if unknown
+ *   fader?: number,              // 0.0–1.0 (partial updates: only included when changed)
+ *   mute?: boolean,              // (partial updates: only included when changed)
+ *   name?: string,               // (partial updates: only included when changed)
+ *   meter?: number,              // 0.0–1.0 normalized level (partial updates: only included when changed)
+ *   signalPresent?: boolean      // true when signal > -80 dB threshold (only included with meter updates)
  * }
  * { type: 'channelState',
- *   channel: number,
- *   fader: number,               // 0.0–1.0
- *   mute: boolean,
- *   name: string,
- *   meterDb: number | null
+ *   targetType: string,          // e.g. "ch"
+ *   targetIndex: number,         // channel number (1–16)
+ *   muted?: boolean,             // (optional: only included when changed)
+ *   meter?: number,              // 0.0–1.0 normalized level (optional: only included when changed)
+ *   name?: string,               // (optional: only included when changed)
+ *   signalPresent?: boolean      // true when signal > -80 dB threshold (optional: only included with meter updates)
  * }
  * { type: 'metersFrame',
  *   frameId: number,             // monotonically increasing
  *   channels: number[],          // e.g. [1,2,3,4,...]
  *   meterDb: number[]            // same length as channels
+ * }
+ * { type: 'connectionState',
+ *   state: 'OFFLINE' | 'STALE' | 'LIVE'
  * }
  * { type: 'error', code: string, message: string }
  */
