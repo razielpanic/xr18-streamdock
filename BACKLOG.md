@@ -4,14 +4,12 @@ Prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup P4= I don't know why w
 
 | ID      | Title                                           | Pr | Type | Notes |
 |---------|-------------------------------------------------|----|------|-------|
-| XD-F011 | Signal-present indicator                        | P1 | feat | Depends on T002 |
 | XD-F010 | FX knob UI refinements                          | P1 | feat | Independent |
 
 ## 2. Feature backlog
 
 | ID      | Title                                           | Pr | Depends | Notes |
 |---------|-------------------------------------------------|----|---------|-------|
-| XD-F011 | Meter signal-present indicator                  | P1 | XD-T002 | Add a minimal “signal present” cue at the very bottom of the dotmeter so activity is visible even with a raised floor / hidden low range (e.g. a baseline pixel/LED that lights whenever recent signal exceeds the noise floor). |
 | XD-F010 | FX knob UI refinements                          | P1 |         | Refine layout for clarity of numeric value and longer channel name. we can definiely fit another line or so. |
 | XD-F013 | FX bus-assignment UI                            | P1 |         | Tap FX tile enters Assign Mode (bus A selected); taps cycle A→B→C→EXIT; knob press toggles selected bus assignment and exits; timeout auto-exits with no change. Phase 1 uses text-only bus indicators in the title; graphical 3-pip strip can follow once SVG-based rendering is available. |
 | XD-F012 | Knob accelleration curve                        | P1 |         | Universal scaling math for smooth accelleration; fine control slow, zippy control fast|
@@ -44,7 +42,8 @@ Capture what you expected, what actually happened, and how to reproduce.
 
 ## 5. Done (for future changelog)
 
-- 2025-12-13 – XD-T009: Globalized safe-state handling end-to-end (bridge + protocol + plugin). Formal LIVE / STALE / OFFLINE model derived from OSC receive activity + meter-frame heartbeats (WebSocket lifecycle is used for propagation only); control writes gated unless LIVE; OFFLINE/STALE UI freezes meters and blocks local “ghost” moves; clean recovery on bridge restart.
+- 2025-12-14 – XD-F011: Signal-present indicator in meters (bullet character \u2022 appears in first empty meter position when signal > -80 dB threshold, visible even when below visual floor; bridge computes from raw meter data, plugin stores and renders).
+- 2025-12-13 – XD-T009: Globalized safe-state handling end-to-end (bridge + protocol + plugin). Formal LIVE / STALE / OFFLINE model derived from OSC receive activity + meter-frame heartbeats (WebSocket lifecycle is used for propagation only); control writes gated unless LIVE; OFFLINE/STALE UI freezes meters and blocks local "ghost" moves; clean recovery on bridge restart.
 - 2025-12-13 – XD-T002: Hardened `/meters/1` decoding path. Isolated blob decode into non-throwing helper; centralized meter conversion math; bounds-safe mapping; prevents malformed meter frames from stalling bridge or locking UI.
 - 2025-12-09 – XD-F012: Channel Button on-air indicator graphic (Channel Button tiles now show an on-air green glow and ON/LIVE text when unmuted, OFF SAFE when muted, and OFFLINE when the bridge is down).
 - 2025-12-09 – XD-F002: Bridge starts up active (SwiftBar plugin now auto-starts the bridge on login and keeps it running unless explicitly disabled via the menu).
@@ -67,7 +66,6 @@ XD-T010["XD-T010\nShared channel-config plumbing"]
 XD-T004["XD-T004\nXR18 simulation mode"]
 
 %% FEATURES
-XD-F011["XD-F011\nMeter signal-present indicator (P1)"]
 XD-F010["XD-F010\nFX knob UI refinements (P1)"]
 XD-F012["XD-F012\nKnob acceleration curve (P1)"]
 XD-F004["XD-F004\nBasic level faders (P3)"]
@@ -77,7 +75,6 @@ XD-F001["XD-F001\nFinish tile channel configuration (P3)"]
 XD-F009["XD-F009\nConfigurable FX channel layout (P5)"]
 
 %% DEPENDENCIES
-XD-T002 --> XD-F011
 XD-T010 --> XD-F001
 XD-F001 --> XD-F009
 
