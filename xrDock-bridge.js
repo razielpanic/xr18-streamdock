@@ -142,8 +142,12 @@ function dbToLevel(db, floorDb) {
 // Separate floors for FX tiles vs Channel Button key:
 //  - FX meters: keep a deep floor so you can see more low-level ambience.
 //  - Channel Button meter: raise floor so noise floor doesn't animate.
-const FX_METER_FLOOR_DB = -90;
+const FX_METER_FLOOR_DB = -60;
 const KEY_METER_FLOOR_DB = -60;
+
+// Signal-present threshold: detect signal above noise floor even when below visual threshold
+// Must be below both FX and channel visual floors to be useful
+const SIGNAL_PRESENT_THRESHOLD_DB = -80;
 
 // Create single UDP socket
 const udp = dgram.createSocket('udp4');
@@ -335,6 +339,13 @@ function broadcastState(state) {
     if (typeof meter === 'number') {
       msg.meter = meter;            // 0.0..1.0
     }
+    // Signal-present indicator: only include if explicitly provided and valid
+    // Defaults to false if missing/invalid (stale/unknown/degraded state)
+    if (typeof state.signalPresent === 'boolean') {
+      msg.signalPresent = state.signalPresent;
+    } else {
+      msg.signalPresent = false;
+    }
   }
 
   const json = JSON.stringify(msg);
@@ -348,14 +359,29 @@ function broadcastState(state) {
 
 // Broadcast a generic channel-state update for Channel Button clients
 function broadcastChannelState(state) {
-  const payload = JSON.stringify({
+  const msg = {
     type: MSG_CHANNEL_STATE || 'channelState',
     targetType: state.targetType,
     targetIndex: state.targetIndex,
-    muted: state.muted,
-    meter: state.meter,
-    name: state.name
-  });
+  };
+
+  // Include optional fields only if present
+  if (typeof state.muted === 'boolean') {
+    msg.muted = state.muted;
+  }
+  if (typeof state.meter === 'number') {
+    msg.meter = state.meter;
+  }
+  if (typeof state.name === 'string') {
+    msg.name = state.name;
+  }
+  // Signal-present indicator: only include when explicitly provided (meter updates)
+  // Do not include for name/mute updates to avoid overwriting previous signalPresent value
+  if (typeof state.signalPresent === 'boolean') {
+    msg.signalPresent = state.signalPresent;
+  }
+
+  const payload = JSON.stringify(msg);
   logBridgeToPlugin(payload);
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
@@ -524,15 +550,20 @@ function handleOscPacket(buf) {
         const level = dbToLevel(db, FX_METER_FLOOR_DB);
         const fx = n + 1;
 
+        // Signal-present: true if db exceeds threshold (valid signal above noise floor)
+        // Only true when we have valid meter data and signal is present
+        const signalPresent = Number.isFinite(db) && db > SIGNAL_PRESENT_THRESHOLD_DB;
+
         if (DEBUG_METERS) {
-          console.log(`METER FX${fx}: raw=${raw} dB=${db.toFixed(1)} lvl=${level.toFixed(2)}`);
+          console.log(`METER FX${fx}: raw=${raw} dB=${db.toFixed(1)} lvl=${level.toFixed(2)} signalPresent=${signalPresent}`);
         }
 
         // Broadcast to plugin as a 'meter' kind; plugin can choose how to render
         broadcastState({
           fx,
           kind: 'meter',
-          value: level
+          value: level,
+          signalPresent
         });
       });
 
@@ -548,10 +579,15 @@ function handleOscPacket(buf) {
         const db = rawToDb(raw);
         const level = dbToLevel(db, KEY_METER_FLOOR_DB);
 
+        // Signal-present: true if db exceeds threshold (valid signal above noise floor)
+        // Only true when we have valid meter data and signal is present
+        const signalPresent = Number.isFinite(db) && db > SIGNAL_PRESENT_THRESHOLD_DB;
+
         broadcastChannelState({
           targetType: 'ch',
           targetIndex: chIdx,
-          meter: level
+          meter: level,
+          signalPresent
         });
       });
 

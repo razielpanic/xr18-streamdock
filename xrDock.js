@@ -188,6 +188,10 @@ function openBridgeWebSocket() {
           inst.meter = m;
         }
 
+        if (typeof msg.signalPresent === "boolean") {
+          inst.signalPresent = msg.signalPresent;
+        }
+
         updateKnobTitle(context);
       }
 
@@ -213,6 +217,9 @@ function openBridgeWebSocket() {
         }
         if (typeof msg.name === "string" && msg.name.trim().length > 0) {
           inst.name = msg.name.trim();
+        }
+        if (typeof msg.signalPresent === "boolean") {
+          inst.signalPresent = msg.signalPresent;
         }
 
         updateChannelTitle(context);
@@ -351,6 +358,7 @@ function handleFxWillAppear(msg) {
     muted: false,
     name: `FX${fx}`, // default label, overridden by mixer name if available
     meter: 0,       // 0.0..1.0 live signal level (from /meters/1)
+    signalPresent: false, // true when signal exceeds noise floor threshold
   };
 
   fxInstances.set(context, inst);
@@ -441,6 +449,7 @@ function makeDefaultChannelInstance(context, payload) {
     name: "",   // from mixer
     muted: false,
     meter: 0.0,
+    signalPresent: false, // true when signal exceeds noise floor threshold
   };
 }
 
@@ -549,6 +558,7 @@ function handleChannelConfigFromPI(msg) {
       name: "",
       muted: false,
       meter: 0,
+      signalPresent: false,
     };
     channelInstances.set(context, inst);
   } else {
@@ -569,7 +579,7 @@ function handleChannelConfigFromPI(msg) {
   updateChannelTitle(context);
 }
 
-function squareMeter(level, width = 8) {
+function squareMeter(level, width = 8, signalPresent = false) {
   // Clamp level to [0,1]
   if (level < 0) level = 0;
   if (level > 1) level = 1;
@@ -577,7 +587,12 @@ function squareMeter(level, width = 8) {
   const empty = Math.max(0, width - filled);
   const fullChar = ":";
   const emptyChar = ".";
-  return fullChar.repeat(filled) + emptyChar.repeat(empty);
+  let meterBar = fullChar.repeat(filled) + emptyChar.repeat(empty);
+  // Signal-present indicator: replace first "." with "•" when signal exceeds noise floor
+  if (signalPresent && empty > 0) {
+    meterBar = fullChar.repeat(filled) + "\u2022" + emptyChar.repeat(empty - 1);
+  }
+  return meterBar;
 }
 
 function updateKnobTitle(context) {
@@ -610,8 +625,9 @@ function updateKnobTitle(context) {
   const faderRight = "-".repeat(Math.max(0, WIDTH_FADER - pos));
   const faderBar = `${faderLeft}+${faderRight}`;
 
-  // Live meter bar: ####....
-  const meterBar = squareMeter(meter01, WIDTH_METER);
+  // Live meter bar: ####.... (with signal-present indicator if applicable)
+  const signalPresent = typeof inst.signalPresent === "boolean" ? inst.signalPresent : false;
+  const meterBar = squareMeter(meter01, WIDTH_METER, signalPresent);
 
   // Build three lines:
   //  1: name + MUTE or dB (or OFFLINE)
@@ -679,7 +695,9 @@ function updateChannelTitle(context) {
 
   const stateIndex = isOnAir ? 1 : 0;
 
-  const meterBar = squareMeter(typeof inst.meter === "number" ? inst.meter : 0, 16);
+  const meter01 = typeof inst.meter === "number" ? inst.meter : 0;
+  const signalPresent = typeof inst.signalPresent === "boolean" ? inst.signalPresent : false;
+  const meterBar = squareMeter(meter01, 16, signalPresent);
 
   const line1 = nameCore;
   const line2 = statusLine;

@@ -12,6 +12,20 @@ This file provides **project-specific guidance for AI-assisted programming** in 
 
 Assume collaboration, not instruction-following.
 
+### Interaction Style and Pace
+
+- The human owner prefers **step-by-step progress** and relies on the assistant
+  to sequence work safely.
+- The assistant should:
+  - Propose a plan before making changes
+  - Implement **one small, contained step at a time**
+  - Pause and wait for confirmation before continuing
+- Large or cross-cutting changes must never be made without explicit approval.
+- When uncertain, stop and ask rather than guessing.
+
+This pacing is intentional and should be treated as a success criterion,
+not a limitation.
+
 ---
 
 ## 2. Governing Documents
