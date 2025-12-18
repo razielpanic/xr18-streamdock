@@ -1,21 +1,32 @@
-Prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup P4= I don't know why we need this, but Chappie seems interested. P1-3= My rankings P5=Probably gonna kill this one
+Prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup P4= I don't know why we need this, but GPT seems interested. P1-3= My rankings P5=Probably gonna kill this one P0= out of scope for release v1
 
-## 1. Active board (for current revsion)
+## Versioning rules (informal)
+
+- **Patch (0.x.y):** Bug fixes, reliability improvements, internal refactors. No new user-visible behaviors or interaction modes.
+- **Minor (0.x.0):** Any new user-visible capability, interaction mode, or persistent UI behavior (e.g. FX Assign Mode, clip indicators, new settings surfaces).
+- **Major (1.0.0):** Stability-complete release. No known P1 bugs, XR18 session recovers from sleep/transport loss without manual intervention, core control surfaces complete (Channel + FX), and no required workaround instructions.
+
+## 1. Active board (for current revision)
 
 | ID      | Title                                           | Pr | Type | Notes |
 |---------|-------------------------------------------------|----|------|-------|
+| XD-F013 | FX bus-assignment UI                            | P1 | feat | 0.5.0 anchor feature. Implement Assign Mode: tap cycles A→B→C→EXIT; knob press toggles assignment + exits; timeout exits. |
+| XD-F005 | Knob acceleration curve                         | P1 | feat | 0.5.0 companion. Universal scaling math for smooth acceleration: fine control slow, fast turns ramp. |
+| XD-B003 | FX fader dB scale shows +20 instead of +10      | P1 | bug  | Fix alongside 0.5.0 work if quick; otherwise ship as 0.4.1. Ensure FX fader display matches X-Air (+10 max). |
+| XD-B002 | Auto-recover after transport loss / sleep       | P1 | bug  | Investigate + implement recovery during 0.5.0 cycle; may ship as 0.4.1/0.5.1 if it risks schedule. Focus on observed meter-stream loss + STALE state. |
 
 ## 2. Feature backlog
 
 | ID      | Title                                           | Pr | Depends | Notes |
 |---------|-------------------------------------------------|----|---------|-------|
 | XD-F013 | FX bus-assignment UI                            | P1 |         | Tap FX tile enters Assign Mode (bus A selected); taps cycle A→B→C→EXIT; knob press toggles selected bus assignment and exits; timeout auto-exits with no change. Phase 1 uses text-only bus indicators in the title; graphical 3-pip strip can follow once SVG-based rendering is available. |
-| XD-F012 | Knob accelleration curve                        | P1 |         | Universal scaling math for smooth accelleration; fine control slow, zippy control fast|
-| XD-F004 | Basic level faders for key inputs               | P3 |         | A page where encoders act as faders for mapped channels and buttons reflect ch info and bank switching or sends. |
+| XD-F005 | Knob acceleration curve                         | P1 |         | Universal scaling math for smooth acceleration; fine control slow, zippy control fast|
+| XD-F014 | Clip indicator with hold at top of meter        | P2 |         | Display a clip indicator when XR18 reports clip/over. Indicator appears at the top of the meter as a single `!` glyph and holds for a fixed 5 seconds before clearing automatically. Applies to all meters (Channel, FX, future tile types). Driven by XR18-provided clip/over data (no local inference). Needs protocol confirmation that XR18 exposes a clip/over flag in the meter data we already decode; if not available, revise to a local inference strategy. |
 | XD-F006 | Per-action settings UI                          | P3 |         | For each action: source selector (Ch 1–18, Bus, FX), label override, meter mode (normal/raised-floor/peaks). |
 | XD-F007 | Global settings UI                              | P3 |         | Bridge host/port, meter update rate,skin, meter style, type size if accessible |
 | XD-F001 | Finish tile channel configuration               | P3 | XD-T010 | User-facing feature: tiles (Channel, FX, future types) can target any XR18 source with persistent mapping; uses shared config plumbing (XD-T010). |
 | XD-F009 | Configurable channel layout for FX type         | P5 | XD-F001 | Simple JSON or similar mapping so layout isn’t hard-coded (e.g. which XR18 source each tile represents). If fixed layouts are fine, you can skip this|
+| XD-F004 | Basic level faders for key inputs               | P0 |         | A page where encoders act as faders for mapped channels and buttons reflect ch info and bank switching or sends. |
 
 ## 3. Bugs / regressions
 
@@ -23,20 +34,23 @@ Capture what you expected, what actually happened, and how to reproduce.
 
 | ID      | Title                                           | Pr | Depends | Notes |
 |---------|-------------------------------------------------|----|---------|-------|
-| XD-B001 | (none logged yet)                               | P3 |         | Placeholder row; replace with the first real bug you encounter. |
+| XD-B002 | Auto-recover after transport loss / sleep       | P1 |         | After extended sleep/transport loss: UI shows STALE; fader+mutes still control XR18 (OSC writes succeed), but `/meters/1` never resumes until bridge is restarted. X-Air Edit meters recover on their own. Bridge restart alone restores metering. Implement bridge-side recovery: when STALE persists beyond threshold (e.g. 10s) and control writes are flowing, force session re-init (renew `/xremote` + `/renew`, re-open OSC socket if needed, re-subscribe metering) and return to LIVE without manual restart. Add a single diagnostic log line when recovery triggers. |
+| XD-B003 | FX fader dB scale shows +20 instead of +10      | P1 |         | FX return tiles: fader value display scale is incorrect at the top end (shows +20 dB). X-Air Edit shows +10 dB at max fader position. Expected FX fader display to match XR18/X-Air (+10 max). Likely mapping/presentation bug in dB conversion or label scale. |
+| XD-B001 | (placeholder)                                   | P3 |         | Keep as a template row; do not delete. |
 
 ## 4. Technical / cleanup tasks
 
-| ID      | Title                                           | Pr | ? | Depends | Notes |
-|---------|-------------------------------------------------|----|---|---------|-------|
-| XD-T005 | Better logging and diagnostics                  | P2 |   |         | Structured logs for OSC and WebSocket traffic + connection state, with configurable log levels. |
-| XD-T006 | Unit tests around meter decoding                | P2 |   |         | Sample `/meters/1` blobs mapped to expected per-channel levels to guard against regressions. |
-| XD-T007 | Refactor bridge into smaller modules            | P2 |   |         | Split bridge into OSC transport, WebSocket transport, protocol/schema, and app entrypoint modules. |
-| XD-T008 | `oscProtocol` separation and validation         | P2 |   |         | Centralize XR18 OSC message construction/parsing in an `oscProtocol` module and align with `wsProtocol` schemas; single validation point instead of ad-hoc shapes. |
-| XD-T010 | Shared channel-config plumbing for all tiles    | P2 |   |         | Extract Channel Button mapping logic into a shared config module used by all tile types (Channel, FX, future fader pages). Supports XD-F001. |
-| XD-T011 | SVG tile rendering engine                       | P2 |   |         | Introduce a small rendering module that outputs per-tile SVG images (meters, pip strips, safe-state indicators) and sends them via setImage. Enables graphical bus pips for XD-F013 Phase 2 and future unified visual layouts. |
-| XD-T020 | Switch to bridge-less architecture (rev 2.0)    | P0 |   |         | Investigate collapsing SwiftBar bridge into Stream Dock plugin backend for public release. Goal: single install, no helper apps. Review SDK lifecycle, UDP/OSC feasibility, internal modularization, and distribution implications. See discussion re: internal backend vs external bridge. |
-| XD-T004 | XR18 simulation mode                            | P5 |   |         | Optional mode where the bridge simulates `/meters/1` and basic channel state for development without the mixer. Only useful if you want to develop the plugin without the mixer turned on.| 
+| ID      | Title                                           | Pr | Depends | Notes |
+|---------|-------------------------------------------------|----|---------|-------|
+| XD-T005 | Better logging and diagnostics                  | P2 |         | Structured logs for OSC and WebSocket traffic + connection state, with configurable log levels. |
+| XD-T006 | Unit tests around meter decoding                | P2 |         | Sample `/meters/1` blobs mapped to expected per-channel levels to guard against regressions. |
+| XD-T007 | Refactor bridge into smaller modules            | P2 |         | Split bridge into OSC transport, WebSocket transport, protocol/schema, and app entrypoint modules. |
+| XD-T008 | `oscProtocol` separation and validation         | P2 |         | Centralize XR18 OSC message construction/parsing in an `oscProtocol` module and align with `wsProtocol` schemas; single validation point instead of ad-hoc shapes. |
+| XD-T010 | Shared channel-config plumbing for all tiles    | P2 |         | Extract Channel Button mapping logic into a shared config module used by all tile types (Channel, FX, future fader pages). Supports XD-F001. |
+| XD-T011 | SVG tile rendering engine                       | P2 |         | Introduce a small rendering module that outputs per-tile SVG images (meters, pip strips, safe-state indicators) and sends them via setImage. Enables graphical bus pips for XD-F013 Phase 2 and future unified visual layouts. |
+| XD-T020 | Switch to bridge-less architecture (rev 2.0)    | P0 |         | Investigate collapsing SwiftBar bridge into Stream Dock plugin backend for public release. Goal: single install, no helper apps. Review SDK lifecycle, UDP/OSC feasibility, internal modularization, and distribution implications. See discussion re: internal backend vs external bridge. |
+| XD-T004 | XR18 simulation mode                            | P5 |         | Optional mode where the bridge simulates `/meters/1` and basic channel state for development without the mixer. Only useful if you want to develop the plugin without the mixer turned on.| 
+| XD-T012 | Unicode box-drawing fader rendering experiment  | P3 |         | Replace current ASCII fader bar with higher-resolution Unicode box/half-block characters to achieve smoother, more analog-feeling fader motion. Applies to faders first (meters may follow later). Hard-coded as the default (no toggle). Font/glyph inconsistencies acceptable given single-device use. Exploratory/technical task. |
 
 ## 5. Done (for future changelog)
 
@@ -50,30 +64,3 @@ Capture what you expected, what actually happened, and how to reproduce.
 - 2025-12-04 – XD-T001: Explicit OSC session lifecycle handling (`/xremote` + `/renew`, reconnect logic, and connection state exposed to plugin).
 - 2025-12-04 – XD-F008: Graceful “no bridge” behaviour (tiles indicate offline state instead of failing silently).
 - 2025-12-04 – XD-T003: Initial `wsProtocol` module created to isolate WebSocket message schema between bridge and plugin.
-
-## Dependency Graph
-
-```mermaid
-graph TD
-
-%% TECH TASKS
-XD-T005["XD-T005\nBetter logging & diagnostics"]
-XD-T006["XD-T006\nUnit tests around meter decoding"]
-XD-T007["XD-T007\nRefactor bridge into smaller modules"]
-XD-T008["XD-T008\noscProtocol separation & validation"]
-XD-T010["XD-T010\nShared channel-config plumbing"]
-XD-T004["XD-T004\nXR18 simulation mode"]
-
-%% FEATURES
-XD-F012["XD-F012\nKnob acceleration curve (P1)"]
-XD-F004["XD-F004\nBasic level faders (P3)"]
-XD-F006["XD-F006\nPer-action settings UI (P3)"]
-XD-F007["XD-F007\nGlobal settings UI (P3)"]
-XD-F001["XD-F001\nFinish tile channel configuration (P3)"]
-XD-F009["XD-F009\nConfigurable FX channel layout (P5)"]
-
-%% DEPENDENCIES
-XD-T010 --> XD-F001
-XD-F001 --> XD-F009
-
-``` 

@@ -2,7 +2,7 @@
 
 ## v0.4.0 — FX UI refinements + signal presence indicators
 - XD-F010: FX knob UI refinements. Expanded FX tiles to a four-line layout: channel name, status/value, fader bar, and meter bar. Improves legibility of numeric values and supports longer channel names without truncation.
-- XD-F011: Signal-present indicator in meters. Added a persistent signal-present glyph when audio exceeds the visual floor, ensuring low-level signal activity remains visible even when meters appear idle.
+- XD-F011: Signal-present indicator in meters. Added a persistent signal-present glyph when audio exceeds a noise floor, ensuring low-level signal activity remains visible even when meters appear idle.
 
 ## v0.3.1 — Bridge auto-start + on-air indicator
 - Added SwiftBar-based auto-start for the XR18 bridge on login, with an explicit disable flag so the bridge can be stopped and kept down when needed.
