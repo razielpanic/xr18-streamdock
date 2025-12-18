@@ -629,29 +629,37 @@ function updateKnobTitle(context) {
   const signalPresent = typeof inst.signalPresent === "boolean" ? inst.signalPresent : false;
   const meterBar = squareMeter(meter01, WIDTH_METER, signalPresent);
 
-  // Build three lines:
-  //  1: name + MUTE or dB (or OFFLINE)
-  //  2: fader bar
-  //  3: live meter bar
+  // Build four lines:
+  //  1: channel name
+  //  2: status/value (dB, MUTE, OFFLINE, STALE)
+  //  3: fader bar
+  //  4: live meter bar
   const isOffline = (!bridgeOnline || bridgeSafeState === 'OFFLINE');
   const isStale = (!isOffline && bridgeSafeState === 'STALE');
 
-  const nameCore = isOffline
+  // Line 1: Channel name only
+  const nameLine = isOffline
     ? "--"
     : (inst.name || `FX${inst.fx}`);
 
-  const statusCore = isOffline
-    ? "OFFLINE"
-    : (isStale ? "STALE" : (inst.muted ? `MUTE` : `${db.toFixed(1)} dB`));
-  const line1Core = `${nameCore} ${statusCore}`;
-  const line2Core = faderBar;
-  const line3Core = meterBar;
+  // Line 2: Status/value only
+  let statusLine;
+  if (isOffline) {
+    statusLine = "OFFLINE";
+  } else if (isStale) {
+    statusLine = "STALE";
+  } else if (inst.muted) {
+    statusLine = "MUTE";
+  } else {
+    statusLine = `${db.toFixed(1)} dB`;
+  }
 
-  const line1 = `${padLeftStr}${line1Core}${padRightStr}`;
-  const line2 = `${padLeftStr}${line2Core}${padRightStr}`;
-  const line3 = `${padLeftStr}${line3Core}${padRightStr}`;
+  const line1 = `${padLeftStr}${nameLine}${padRightStr}`;
+  const line2 = `${padLeftStr}${statusLine}${padRightStr}`;
+  const line3 = `${padLeftStr}${faderBar}${padRightStr}`;
+  const line4 = `${padLeftStr}${meterBar}${padRightStr}`;
 
-  const title = `${line1}\n${line2}\n${line3}`;
+  const title = `${line1}\n${line2}\n${line3}\n${line4}`;
 
   const payload = {
     event: "setTitle",

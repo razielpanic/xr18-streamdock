@@ -74,7 +74,7 @@ Unknown or undocumented XR18 behavior must be surfaced, not guessed.
 - Correct-but-delayed is preferable to fast-but-wrong
 
 Reliability and truthfulness take precedence over elegance or abstraction.
-Currently, recovery from XR18 transport loss requires reinitializing the bridge process; automatic transport-level recovery is a planned improvement
+Currently, recovery from XR18 transport loss requires reinitializing the bridge process; automatic transport-level recovery is a planned improvement.
 
 ---
 
