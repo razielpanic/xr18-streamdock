@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.0 — FX assignment + fader feel + transport resilience
+
+- XD-F013: FX bus-assignment UI. FX tiles now support live routing to Buses A/B/C directly from the Stream Dock. Double-press enters Assign Mode, rotate cycles buses, and press toggles assignment to named bus.
+- XD-F005: Knob acceleration overhaul for FX faders. Fader movement is now dB-domain with 0.1 dB precision near unity, smooth speed-based acceleration, and predictable behavior across the full range. Improves both fine control and fast traversal.
+- XD-B003: FX fader scale correction. Fixed FX return fader range to match X-Air Edit exactly (−∞ to +10 dB), including correct unity behavior and numeric readout alignment.
+- XD-B002 (minimal): One-shot automatic recovery from STALE meter state. When OSC control remains alive but meter traffic stalls (e.g. sleep or cable pull), the bridge reasserts the XR18 session and meter subscription once per STALE episode, restoring meters without restart.
+- Logging: Reduced default log noise in both plugin and bridge by gating high-frequency debug output behind explicit flags.
+
 ## v0.4.0 — FX UI refinements + signal presence indicators
 - XD-F010: FX knob UI refinements. Expanded FX tiles to a four-line layout: channel name, status/value, fader bar, and meter bar. Improves legibility of numeric values and supports longer channel names without truncation.
 - XD-F011: Signal-present indicator in meters. Added a persistent signal-present glyph when audio exceeds a noise floor, ensuring low-level signal activity remains visible even when meters appear idle.
