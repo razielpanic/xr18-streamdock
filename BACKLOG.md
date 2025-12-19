@@ -10,17 +10,12 @@ Prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup P4= I don't know why w
 
 | ID      | Title                                           | Pr | Type | Notes |
 |---------|-------------------------------------------------|----|------|-------|
-| XD-F013 | FX bus-assignment UI                            | P1 | feat | 0.5.0 anchor feature. Implement Assign Mode: tap cycles A→B→C→EXIT; knob press toggles assignment + exits; timeout exits. |
-| XD-F005 | Knob acceleration curve                         | P1 | feat | 0.5.0 companion. Universal scaling math for smooth acceleration: fine control slow, fast turns ramp. |
-| XD-B003 | FX fader dB scale shows +20 instead of +10      | P1 | bug  | Fix alongside 0.5.0 work if quick; otherwise ship as 0.4.1. Ensure FX fader display matches X-Air (+10 max). |
-| XD-B002 | Auto-recover after transport loss / sleep       | P1 | bug  | Investigate + implement recovery during 0.5.0 cycle; may ship as 0.4.1/0.5.1 if it risks schedule. Focus on observed meter-stream loss + STALE state. |
+| XD-B001 | (placeholder)                                   | P3 |      | Keep as a template row; do not delete. |
 
 ## 2. Feature backlog
 
 | ID      | Title                                           | Pr | Depends | Notes |
 |---------|-------------------------------------------------|----|---------|-------|
-| XD-F013 | FX bus-assignment UI                            | P1 |         | Tap FX tile enters Assign Mode (bus A selected); taps cycle A→B→C→EXIT; knob press toggles selected bus assignment and exits; timeout auto-exits with no change. Phase 1 uses text-only bus indicators in the title; graphical 3-pip strip can follow once SVG-based rendering is available. |
-| XD-F005 | Knob acceleration curve                         | P1 |         | Universal scaling math for smooth acceleration; fine control slow, zippy control fast|
 | XD-F014 | Clip indicator with hold at top of meter        | P2 |         | Display a clip indicator when XR18 reports clip/over. Indicator appears at the top of the meter as a single `!` glyph and holds for a fixed 5 seconds before clearing automatically. Applies to all meters (Channel, FX, future tile types). Driven by XR18-provided clip/over data (no local inference). Needs protocol confirmation that XR18 exposes a clip/over flag in the meter data we already decode; if not available, revise to a local inference strategy. |
 | XD-F006 | Per-action settings UI                          | P3 |         | For each action: source selector (Ch 1–18, Bus, FX), label override, meter mode (normal/raised-floor/peaks). |
 | XD-F007 | Global settings UI                              | P3 |         | Bridge host/port, meter update rate,skin, meter style, type size if accessible |
@@ -34,8 +29,6 @@ Capture what you expected, what actually happened, and how to reproduce.
 
 | ID      | Title                                           | Pr | Depends | Notes |
 |---------|-------------------------------------------------|----|---------|-------|
-| XD-B002 | Auto-recover after transport loss / sleep       | P1 |         | After extended sleep/transport loss: UI shows STALE; fader+mutes still control XR18 (OSC writes succeed), but `/meters/1` never resumes until bridge is restarted. X-Air Edit meters recover on their own. Bridge restart alone restores metering. Implement bridge-side recovery: when STALE persists beyond threshold (e.g. 10s) and control writes are flowing, force session re-init (renew `/xremote` + `/renew`, re-open OSC socket if needed, re-subscribe metering) and return to LIVE without manual restart. Add a single diagnostic log line when recovery triggers. |
-| XD-B003 | FX fader dB scale shows +20 instead of +10      | P1 |         | FX return tiles: fader value display scale is incorrect at the top end (shows +20 dB). X-Air Edit shows +10 dB at max fader position. Expected FX fader display to match XR18/X-Air (+10 max). Likely mapping/presentation bug in dB conversion or label scale. |
 | XD-B001 | (placeholder)                                   | P3 |         | Keep as a template row; do not delete. |
 
 ## 4. Technical / cleanup tasks
@@ -54,6 +47,10 @@ Capture what you expected, what actually happened, and how to reproduce.
 
 ## 5. Done (for future changelog)
 
+- 2025-12-18 – XD-F013: FX bus-assignment UI. FX tiles support live routing to Buses A/B/C via Assign Mode (double-tap to enter, turn to cycle, knob press to toggle + exit, safe timeout).
+- 2025-12-18 – XD-F005: Knob acceleration curve overhaul. FX fader control moved to dB-domain with 0.1 dB precision near unity, smooth speed-based acceleration, stabilized multi-tick handling, and predictable behavior across the full range.
+- 2025-12-18 – XD-B003: FX fader dB scale correction. Fixed FX return fader display range to match X-Air Edit exactly (−∞ to +10 dB), including correct unity behavior.
+- 2025-12-18 – XD-B002: Minimal auto-recovery after transport loss. Bridge performs a one-shot STALE recovery by reasserting XR18 session and meter subscription, restoring meters after sleep or cable pull without restart.
 - 2025-12-14 – XD-F010: FX knob UI refinements (expanded to 4-line layout: channel name on line 1, status/value on line 2, fader bar on line 3, meter bar on line 4; improves clarity of numeric values and supports longer channel names up to 13 characters).
 - 2025-12-14 – XD-F011: Signal-present indicator in meters (bullet character \u2022 appears in first empty meter position when signal > -80 dB threshold, visible even when below visual floor; bridge computes from raw meter data, plugin stores and renders).
 - 2025-12-13 – XD-T009: Globalized safe-state handling end-to-end (bridge + protocol + plugin). Formal LIVE / STALE / OFFLINE model derived from OSC receive activity + meter-frame heartbeats (WebSocket lifecycle is used for propagation only); control writes gated unless LIVE; OFFLINE/STALE UI freezes meters and blocks local "ghost" moves; clean recovery on bridge restart.

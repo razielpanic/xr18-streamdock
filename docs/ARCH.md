@@ -1,8 +1,94 @@
 # ARCH.md — Architecture Overview
 
-This document defines the **architectural boundaries, mental model, and failure philosophy** for the XR18 Stream Dock project. It is intentionally concise and non-prescriptive.
+This document defines the **architectural boundaries, mental model, and failure philosophy** for the XR18 Stream Dock project. It is meant to be brief and decision-oriented.
 
 This project is governed by `docs/PRD.md`. If a proposed code change contradicts the PRD, the PRD should be updated first.
+
+---
+
+## 0. Decision Log
+
+This section records **durable decisions** made during implementation so they remain stable across “New Agent” threads and refactors.
+For workflow rules and completion gates, see .cursor/assistant.md.
+
+### Template
+
+```md
+### XD-<ID> — <Short title>
+**Context**
+- <constraint or problem>
+
+**Decision**
+- <specific, testable choice>
+
+**Rationale**
+- <why this approach>
+
+**Invariants Preserved**
+- <must-not-regress rules>
+
+**Confirmed Facts**
+- <verified protocol paths / behaviors>
+
+**Deferred / Open**
+- <optional>
+```
+
+### Entries
+
+### v0.5.0 — FX control ergonomics and minimal transport recovery
+**Context**
+- FX returns require live routing changes without relying on X-Air Edit.
+- Stream Dock rotary input produces variable tick bursts and timing jitter.
+- XR18 fader law is non-linear and UI display precision does not reflect internal resolution.
+- Meter transport can stall independently of OSC control traffic (sleep, cable pull).
+
+**Decision**
+- Implement FX bus assignment directly on FX tiles with an explicit Assign Mode and safe exit paths.
+- Move FX fader control to a dB-domain model with quantization at 0.1 dB near unity and speed-based acceleration.
+- Match documented XR18/X32 fader law (−∞ to +10 dB) rather than inventing a custom curve.
+- Add a one-shot STALE recovery in the bridge that reasserts the XR18 session and meter subscription.
+
+**Rationale**
+- Live trustworthiness matters more than implementation simplicity.
+- dB-domain control aligns tactile intent with what the mixer and UI actually represent.
+- A single guarded recovery attempt provides resilience without risking runaway retry loops.
+
+**Invariants Preserved**
+- XR18 remains the single source of truth for all levels, routing, and meters.
+- The plugin never infers state beyond what the mixer reports.
+- Recovery mechanisms must not spam logs or destabilize steady-state operation.
+
+**Confirmed Facts**
+- XR18 accepts high-resolution fader values even though X-Air Edit displays one decimal place.
+- Meter data and control writes can succeed or fail independently.
+- Stream Dock input events may be batched or bursty.
+
+**Deferred / Open**
+- Multi-attempt or adaptive recovery strategies are deferred to a future release if needed.
+
+### v0.4.0 — Meter safe-state truthfulness and signal-present indicator
+**Context**
+- `/meters/1` can stop updating without a clean transport teardown.
+- UI state can otherwise appear “live” while showing last-known values.
+
+**Decision**
+- Treat missing meter frames as **STALE**.
+- Freeze meter visuals and show a clear “not live” state.
+- Signal-present indicators must never remain “on” from stale data.
+
+**Rationale**
+- False confidence during live use is worse than temporary loss of information.
+
+**Invariants Preserved**
+- XR18 remains the single source of truth.
+- The plugin must not infer signal state when meter data is stale.
+
+**Confirmed Facts**
+- Meter updates and control writes can fail independently.
+
+**Deferred / Open**
+- Automatic transport-level recovery is tracked separately (see XD-B002).
 
 ---
 
@@ -68,42 +154,14 @@ Unknown or undocumented XR18 behavior must be surfaced, not guessed.
 
 ## 5. Failure Philosophy
 
-- Silent failure is unacceptable
-- Stale or uncertain state must be indicated
-- Recovery is preferred over restart
-- Correct-but-delayed is preferable to fast-but-wrong
+- Silent failure is unacceptable.
+- Stale/uncertain state must be visible.
+- Prefer recovery over restart.
+- Prefer correct-but-delayed over fast-but-wrong.
 
 Reliability and truthfulness take precedence over elegance or abstraction.
-Currently, recovery from XR18 transport loss requires reinitializing the bridge process; automatic transport-level recovery is a planned improvement.
 
 ---
-
-## 6. Collaboration Model
-
-- The **human owner** defines intent, scope, and acceptance criteria
-- The **programming assistant** is expected to guide implementation with expertise
-- Code changes should be small, explicit, and testable
-
-When uncertain, stop and ask. Clarity is always preferred over cleverness.
-
-### Programming Assistant Interaction Model
-
-This project is developed with the assistance of an AI programming assistant.
-
-- The human owner is a **beginner-to-intermediate programmer** in this codebase
-  and relies on the assistant to act as the **primary programmer**.
-- The assistant is expected to:
-  - Propose **small, incremental changes**
-  - Explain *what* is being done and *why*, clearly and briefly
-  - Prefer plans and diffs over large unsolicited code blocks
-- Work should proceed in **explicit steps**:
-  1. Plan
-  2. Confirm
-  3. Implement one small step
-  4. Pause for review
-- When uncertain, the assistant must **ask before acting**, not guess.
-
-These interaction rules are intentional and should be followed throughout development.
 
 ## 7. Platform Constraints & Known Limitations
 

@@ -6,7 +6,7 @@ This file provides **project-specific guidance for AI-assisted programming** in 
 
 ## 1. Human / AI Roles
 
-- The **human owner is not the primary programmer**.
+- The **assistant** acts as the primary programmer.
 - The assistant is expected to provide **expert-level guidance** on Node.js, TypeScript/JavaScript, OSC, and macOS integration.
 - The human defines intent, constraints, and acceptance criteria; the assistant proposes and explains implementations.
 
@@ -19,12 +19,14 @@ Assume collaboration, not instruction-following.
 - The assistant should:
   - Propose a plan before making changes
   - Implement **one small, contained step at a time**
-  - Pause and wait for confirmation before continuing
-- Large or cross-cutting changes must never be made without explicit approval.
 - When uncertain, stop and ask rather than guessing.
 
-This pacing is intentional and should be treated as a success criterion,
-not a limitation.
+### Working Method
+
+1. Plan  
+2. Implement one small step  
+3. Pause for review  
+4. Record a Decision Log entry when a durable decision is made  
 
 ---
 
@@ -39,7 +41,18 @@ If a proposed change conflicts with these documents, **stop and surface the conf
 
 ---
 
-## 3. Core Biases (Deliberate)
+## 3. Decision Log Gate
+
+No XD-* feature is complete until its Decision Log entry exists in `docs/ARCH.md`.
+
+Add an entry when you introduce a new interaction mode, safety invariant, protocol fact, or consciously reject an alternative.
+
+When closing an XD-* thread, the assistant should explicitly ask:
+- “What Decision Log entry should we add for this work?”
+
+---
+
+## 4. Core Biases (Deliberate)
 
 When making decisions, prefer:
 
@@ -52,7 +65,7 @@ Avoid inventing XR18/X-Air behavior or OSC paths.
 
 ---
 
-## 4. Protocol Handling Rules
+## 5. Protocol Handling Rules
 
 - Do not guess undocumented XR18 behavior
 - Treat OSC messages as mixer truth unless proven otherwise
@@ -61,7 +74,7 @@ Avoid inventing XR18/X-Air behavior or OSC paths.
 
 ---
 
-## 5. Code Style Expectations
+## 6. Code Style Expectations
 
 - Modern, readable JavaScript / TypeScript
 - Avoid cleverness and meta-abstractions
@@ -72,7 +85,7 @@ Comments should explain *why*, not restate *what*.
 
 ---
 
-## 6. Known-Good Behaviors to Preserve
+## 7. Known-Good Behaviors to Preserve
 
 Any change must preserve:
 
@@ -85,12 +98,12 @@ Regression risk is more important than feature velocity.
 
 ---
 
-## 7. How to Succeed on This Project
+## 8. How to Succeed on This Project
 
 - Read the PRD before coding
 - Ask clarifying questions when behavior is ambiguous
 - Propose changes with rationale and tradeoffs
 - Prefer stability milestones over feature accumulation
+- Prefer one “New Agent” thread per XD-* item to avoid cross-feature context contamination
 
 When in doubt, choose correctness and trustworthiness.
-
