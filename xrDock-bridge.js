@@ -33,6 +33,7 @@ const {
   MSG_REQUEST_FULL_STATE,
   MSG_SET_FX_FADER,
   MSG_SET_FX_MUTE,
+  MSG_SET_FX_BUS_ASSIGNMENT,
   MSG_SET_CHANNEL_FADER,
   MSG_SET_CHANNEL_MUTE,
   MSG_FX_STATE,
@@ -43,11 +44,21 @@ const {
   parseMessage,
 } = wsProtocol;
 
-// Debug flags
-const DEBUG_OSC    = false;
-const DEBUG_WS     = false;
-const DEBUG_JSON   = false; // JSON traffic bridge <-> plugin
-const DEBUG_METERS = false; // per-meter logging
+// Debug flags (edit these booleans directly while developing)
+const DEBUG_OSC        = false; // logs raw OSC packets from XR18
+const DEBUG_WS         = false; // logs decoded WS objects (in addition to JSON line logs)
+// Logs every OSC control write we send to the XR18 (very noisy during knob moves)
+const DEBUG_OSC_SEND   = false;
+
+// JSON traffic bridge <-> plugin (high volume). Keep enabled but filtered by default.
+// Turn this off if the console is too noisy.
+const DEBUG_JSON       = false;
+
+// Per-meter detailed logging (very high volume). Enable only when debugging meters.
+const DEBUG_METERS     = false;
+
+// Forwarded plugin {type:"log"} messages. Enable when you want to see input events (keyDown/dialDown).
+const DEBUG_PLUGIN_LOG = false;
 
 // ---- T009: Connection / Safe-State (OFFLINE | STALE | LIVE) ----
 
@@ -63,6 +74,10 @@ const METERS_LIVE_MS = 1500;   // meters seen recently => LIVE
 let lastOscRxAt = 0;
 let lastMetersRxAt = 0;
 let lastSafeState = SAFE_OFFLINE;
+
+// One-shot recovery attempt per STALE episode (XD-B002 minimal)
+let staleRecoveryAttempted = false;
+let staleRecoveryTimer = null;
 
 function computeSafeState(now) {
   const oscAge = lastOscRxAt ? (now - lastOscRxAt) : Infinity;
@@ -94,6 +109,52 @@ function updateAndBroadcastSafeState(now) {
   if (next !== lastSafeState) {
     lastSafeState = next;
     broadcastConnectionState(next);
+
+    // XD-B002 minimal: attempt a single recovery when entering STALE.
+    if (next === SAFE_STALE) {
+      scheduleStaleRecoveryOnce();
+    } else {
+      // Any transition to LIVE/OFFLINE resets the per-episode guard.
+      resetStaleRecoveryState();
+    }
+  }
+}
+
+function scheduleStaleRecoveryOnce() {
+  if (staleRecoveryAttempted) return;
+  staleRecoveryAttempted = true;
+
+  // Small delay so we don't fire in the middle of a transient gap
+  if (staleRecoveryTimer) {
+    clearTimeout(staleRecoveryTimer);
+    staleRecoveryTimer = null;
+  }
+
+  staleRecoveryTimer = setTimeout(() => {
+    staleRecoveryTimer = null;
+
+    // Only attempt if we are still STALE (not OFFLINE, not already LIVE)
+    if (lastSafeState !== SAFE_STALE) return;
+
+    console.log('[B002] STALE detected: one-shot recovery (reassert /xremotenfb + renew meters/1)');
+
+    try {
+      // Reassert remote session + renew meters subscription
+      sendOscQuery('/xremotenfb');
+      subscribeMeters();
+      pollMeters();
+    } catch (e) {
+      // Never throw from recovery path
+      console.warn('[B002] Recovery attempt failed:', e && e.message ? e.message : e);
+    }
+  }, 250);
+}
+
+function resetStaleRecoveryState() {
+  staleRecoveryAttempted = false;
+  if (staleRecoveryTimer) {
+    clearTimeout(staleRecoveryTimer);
+    staleRecoveryTimer = null;
   }
 }
 
@@ -107,13 +168,50 @@ function maySendControl() {
 setInterval(() => updateAndBroadcastSafeState(Date.now()), 250);
 
 // JSON flow logging helpers (plugin <-> bridge)
+// Filter high-frequency meter frames and forwarded plugin logs so the console remains usable.
+function shouldLogJson(raw, direction) {
+  if (!DEBUG_JSON) return false;
+
+  // Fast path: drop obvious meter updates without parsing.
+  // These dominate output under normal operation.
+  if (raw && typeof raw === 'string') {
+    // Bridge -> plugin fxState meter frames
+    if (raw.includes('"type":"fxState"') && raw.includes('"meter"')) {
+      return false;
+    }
+    // Any explicit metersFrame message types (if used)
+    if (raw.includes('"type":"metersFrame"') || raw.includes('"type":"meter"')) {
+      return false;
+    }
+  }
+
+  // Try to parse for more precise filtering (never throw)
+  try {
+    const msg = JSON.parse(raw);
+    if (!msg || typeof msg !== 'object') return true;
+
+    // Suppress forwarded plugin log spam unless explicitly enabled
+    if (direction === 'PLUGIN' && msg.type === 'log' && !DEBUG_PLUGIN_LOG) {
+      return false;
+    }
+
+    // Also suppress bridge->plugin connectionState payload repeats are already edge-triggered,
+    // so we keep them visible.
+
+    return true;
+  } catch {
+    // If it isn't JSON, log it (rare)
+    return true;
+  }
+}
+
 function logPluginToBridge(raw) {
-  if (!DEBUG_JSON) return;
+  if (!shouldLogJson(raw, 'PLUGIN')) return;
   console.log('[PLUGIN → BRIDGE]', raw);
 }
 
 function logBridgeToPlugin(raw) {
-  if (!DEBUG_JSON) return;
+  if (!shouldLogJson(raw, 'BRIDGE')) return;
   console.log('[BRIDGE → PLUGIN]', raw);
 }
 
@@ -169,6 +267,26 @@ function pad2(n) {
 // Registered channel button targets (for Channel Button action)
 // Each entry: { targetType: "ch", targetIndex: 1, muted?: bool, name?: string }
 const channelTargets = [];
+
+// Mixbus display names (your convention stores stereo-pair names on the 2nd bus of each pair)
+// We read /bus/2,/bus/4,/bus/6 config names and forward them to FX tiles as busAName/busBName/busCName.
+const busNames = {
+  2: 'BUS 2',
+  4: 'BUS 4',
+  6: 'BUS 6',
+};
+
+function broadcastBusNamesToAllFx() {
+  for (let fx = 1; fx <= 4; fx++) {
+    broadcastState({
+      fx,
+      kind: 'busNames',
+      busAName: busNames[2],
+      busBName: busNames[4],
+      busCName: busNames[6],
+    });
+  }
+}
 
 // ---- Minimal OSC helpers ----
 
@@ -347,6 +465,26 @@ function broadcastState(state) {
       msg.signalPresent = false;
     }
   }
+  if (state.kind === 'busA' && typeof state.busA === 'boolean') {
+    msg.busA = state.busA;
+  }
+  if (state.kind === 'busB' && typeof state.busB === 'boolean') {
+    msg.busB = state.busB;
+  }
+  if (state.kind === 'busC' && typeof state.busC === 'boolean') {
+    msg.busC = state.busC;
+  }
+
+  // Optional paired-bus display names (Bus 2/4/6)
+  if (typeof state.busAName === 'string') {
+    msg.busAName = state.busAName;
+  }
+  if (typeof state.busBName === 'string') {
+    msg.busBName = state.busBName;
+  }
+  if (typeof state.busCName === 'string') {
+    msg.busCName = state.busCName;
+  }
 
   const json = JSON.stringify(msg);
   logBridgeToPlugin(json);
@@ -390,17 +528,28 @@ function broadcastChannelState(state) {
   });
 }
 
-// Poll a single FX return for its current fader and mute state
+// Poll a single FX return for its current fader, mute, and bus assignment state
 function pollFx(fx) {
   // Query current value by sending address with no arguments
   sendOscQuery(fxPath(fx, 'mix/fader'));
   sendOscQuery(fxPath(fx, 'mix/on'));
   sendOscQuery(`/rtn/${fx}/config/name`);
+  // Query bus assignments (A=01, B=03, C=05)
+  sendOscQuery(`/rtn/${fx}/mix/01/grpon`);
+  sendOscQuery(`/rtn/${fx}/mix/03/grpon`);
+  sendOscQuery(`/rtn/${fx}/mix/05/grpon`);
 }
 
 // Poll all four FX returns
 function pollAllFx() {
   [1, 2, 3, 4].forEach(pollFx);
+}
+
+// Poll mixbus display names used for FX Assign Mode labels (Bus 2/4/6)
+function pollBusNames() {
+  sendOscQuery('/bus/2/config/name');
+  sendOscQuery('/bus/4/config/name');
+  sendOscQuery('/bus/6/config/name');
 }
 
 // Poll all registered channel button targets for mute + name
@@ -595,6 +744,24 @@ function handleOscPacket(buf) {
     }
   }
 
+  // Handle mixbus names: /bus/N/config/name <string>
+  const mBusName = addr.match(/^\/bus\/(\d+)\/config\/name$/);
+  if (mBusName) {
+    const busIndex = parseInt(mBusName[1], 10);
+    if (!Number.isNaN(busIndex) && (busIndex === 2 || busIndex === 4 || busIndex === 6) && args.length > 0) {
+      const nameArg = args[0];
+      const name = String(nameArg && nameArg.value ? nameArg.value : '').trim();
+      if (name.length > 0) {
+        busNames[busIndex] = name;
+        if (DEBUG_OSC) {
+          console.log('OSC REPLY BUS NAME:', addr, name);
+        }
+        broadcastBusNamesToAllFx();
+      }
+    }
+    return;
+  }
+
   // Handle FX return names: /rtn/N/config/name <string>
   const mName = addr.match(/^\/rtn\/(\d+)\/config\/name$/);
   if (mName) {
@@ -673,13 +840,48 @@ function handleOscPacket(buf) {
   // Expect replies like:
   //   /rtn/1/mix/fader <float>
   //   /rtn/1/mix/on    <int 0|1>
+  //   /rtn/1/mix/01/grpon <int 0|1> (bus A)
+  //   /rtn/1/mix/03/grpon <int 0|1> (bus B)
+  //   /rtn/1/mix/05/grpon <int 0|1> (bus C)
+  
+  // Check for bus assignment paths first: /rtn/N/mix/XX/grpon
+  const mBus = addr.match(/^\/rtn\/(\d+)\/mix\/(\d+)\/grpon$/);
+  if (mBus) {
+    const fx = parseInt(mBus[1], 10);
+    const busIndex = parseInt(mBus[2], 10);
+    if (Number.isNaN(fx) || fx < 1 || fx > 4) return;
+    if (args.length === 0) return;
+    const raw = Number(args[0].value);
+    const assigned = (raw === 1);
+
+    if (DEBUG_OSC) {
+      console.log('OSC REPLY BUS ASSIGN:', addr, raw, 'assigned=', assigned);
+    }
+
+    // Map bus index to bus letter (01=A, 03=B, 05=C)
+    let busField = null;
+    if (busIndex === 1) busField = 'busA';
+    else if (busIndex === 3) busField = 'busB';
+    else if (busIndex === 5) busField = 'busC';
+
+    if (busField) {
+      broadcastState({
+        fx,
+        kind: busField,
+        [busField]: assigned
+      });
+    }
+    return;
+  }
+
+  // Handle fader and mute paths: /rtn/N/mix/fader or /rtn/N/mix/on
   const m = addr.match(/^\/rtn\/(\d+)\/mix\/(fader|on)$/);
   if (!m) return;
 
   const fx = parseInt(m[1], 10);
-  const kind = m[2];
   if (Number.isNaN(fx) || fx < 1 || fx > 4) return;
 
+  const kind = m[2];
   if (kind === 'fader') {
     if (args.length === 0) return;
     const value = Number(args[0].value);
@@ -724,12 +926,16 @@ udp.on('listening', () => {
   // Initial poll when OSC is ready
   pollAllFx();
   pollMeters();
+  pollBusNames();
+  broadcastBusNamesToAllFx();
 
   // Poll periodically to stay in sync even if other controllers move the mixer
   setInterval(pollAllFx, 1000);
   setInterval(pollChannelTargets, 1000);
   // Renew meter subscription periodically for live levels (every ~1s)
   setInterval(pollMeters, 1000);
+  // Bus names rarely change; poll occasionally
+  setInterval(pollBusNames, 5000);
 });
 
 udp.on('message', (msg /*, rinfo */) => {
@@ -751,6 +957,40 @@ wss.on('connection', (ws) => {
   // Send current safe-state immediately on connect
   updateAndBroadcastSafeState(Date.now());
   broadcastConnectionState(lastSafeState);
+
+  // Send current paired-bus display names immediately on connect (so Assign Mode labels are correct before next poll)
+  try {
+    ws.send(JSON.stringify({
+      type: MSG_FX_STATE || 'fxState',
+      fxIndex: 1,
+      busAName: busNames[2],
+      busBName: busNames[4],
+      busCName: busNames[6],
+    }));
+    ws.send(JSON.stringify({
+      type: MSG_FX_STATE || 'fxState',
+      fxIndex: 2,
+      busAName: busNames[2],
+      busBName: busNames[4],
+      busCName: busNames[6],
+    }));
+    ws.send(JSON.stringify({
+      type: MSG_FX_STATE || 'fxState',
+      fxIndex: 3,
+      busAName: busNames[2],
+      busBName: busNames[4],
+      busCName: busNames[6],
+    }));
+    ws.send(JSON.stringify({
+      type: MSG_FX_STATE || 'fxState',
+      fxIndex: 4,
+      busAName: busNames[2],
+      busBName: busNames[4],
+      busCName: busNames[6],
+    }));
+  } catch (e) {
+    // ignore send failures; normal polling will update
+  }
   ws.on('message', (data) => {
     const raw = data.toString();
     logPluginToBridge(raw);
@@ -819,7 +1059,8 @@ wss.on('connection', (ws) => {
     // Existing / legacy message types below ----------------------------
 
     if (msg.type === 'log') {
-      if (DEBUG_WS || DEBUG_JSON) {
+      // Plugin-forwarded logs are optional and can be very noisy.
+      if (DEBUG_PLUGIN_LOG) {
         console.log('PLUGIN LOG:', msg.tag, msg.payload);
       }
       return;
@@ -872,7 +1113,7 @@ wss.on('connection', (ws) => {
         // XR18: /mix/on = 1 → channel ON (unmuted), 0 → channel muted
         const xrOn = nextMuted ? 0 : 1;
 
-        console.log('SEND OSC CH MUTE:', `/ch/${chId}/mix/on`, xrOn);
+        if (DEBUG_OSC_SEND) console.log('SEND OSC CH MUTE:', `/ch/${chId}/mix/on`, xrOn);
         sendOscInt(`/ch/${chId}/mix/on`, xrOn);
 
         existing.muted = nextMuted;
@@ -897,7 +1138,7 @@ wss.on('connection', (ws) => {
       if (v < 0) v = 0;
       if (v > 1) v = 1;
 
-      console.log('SEND OSC FADER:', fxPath(fx, 'mix/fader'), v);
+      if (DEBUG_OSC_SEND) console.log('SEND OSC FADER:', fxPath(fx, 'mix/fader'), v);
       sendOscFloat(fxPath(fx, 'mix/fader'), v);
 
       // Echo state immediately so UI feels responsive
@@ -919,7 +1160,7 @@ wss.on('connection', (ws) => {
       // /mix/on = 0 → channel muted
       const xrOn = muted ? 0 : 1;
 
-      console.log('SEND OSC MUTE:', fxPath(fx, 'mix/on'), xrOn);
+      if (DEBUG_OSC_SEND) console.log('SEND OSC MUTE:', fxPath(fx, 'mix/on'), xrOn);
       sendOscInt(fxPath(fx, 'mix/on'), xrOn);
 
       // Echo mute state immediately using plugin-style boolean
@@ -927,6 +1168,33 @@ wss.on('connection', (ws) => {
         fx,
         kind: 'mute',
         muted
+      });
+      return;
+    }
+
+    // Bus assignment control
+    if (msg.type === MSG_SET_FX_BUS_ASSIGNMENT || msg.type === 'setFxBusAssignment') {
+      let fx = Number(msg.fxIndex ?? msg.fx);
+      if (!Number.isFinite(fx) || fx < 1 || fx > 4) return;
+
+      let busIndex = Number(msg.busIndex);
+      if (!Number.isFinite(busIndex)) return;
+      // Only allow bus indices 1, 3, 5 (A, B, C)
+      if (busIndex !== 1 && busIndex !== 3 && busIndex !== 5) return;
+
+      const assigned = !!msg.assigned;
+      const xrValue = assigned ? 1 : 0;
+
+      const busPath = `/rtn/${fx}/mix/${String(busIndex).padStart(2, '0')}/grpon`;
+      if (DEBUG_OSC_SEND) console.log('SEND OSC BUS ASSIGN:', busPath, xrValue);
+      sendOscInt(busPath, xrValue);
+
+      // Echo bus assignment state immediately
+      const busField = busIndex === 1 ? 'busA' : busIndex === 3 ? 'busB' : 'busC';
+      broadcastState({
+        fx,
+        kind: busField,
+        [busField]: assigned
       });
       return;
     }
@@ -939,7 +1207,7 @@ wss.on('connection', (ws) => {
       if (v < 0) v = 0;
       if (v > 1) v = 1;
 
-      console.log('SEND OSC FADER:', fxPath(msg.fx, 'mix/fader'), v);
+      if (DEBUG_OSC_SEND) console.log('SEND OSC FADER:', fxPath(msg.fx, 'mix/fader'), v);
       sendOscFloat(fxPath(msg.fx, 'mix/fader'), v);
 
       // Echo state immediately so UI feels responsive
@@ -955,7 +1223,7 @@ wss.on('connection', (ws) => {
       // /mix/on = 0 → channel muted
       const xrOn = muted ? 0 : 1;
 
-      console.log('SEND OSC MUTE:', fxPath(msg.fx, 'mix/on'), xrOn);
+      if (DEBUG_OSC_SEND) console.log('SEND OSC MUTE:', fxPath(msg.fx, 'mix/on'), xrOn);
       sendOscInt(fxPath(msg.fx, 'mix/on'), xrOn);
 
       // Echo mute state immediately using plugin-style boolean

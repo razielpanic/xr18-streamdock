@@ -1,7 +1,7 @@
 {
   "Name": "XR18 Control Surface",
   "Author": "You Shriek",
-  "Version": "0.3.0",
+  "Version": "0.5.0",
   "Description": "Control XR18 using buttons and rotary encoders",
   "Category": "XR18",
   "Icon": "blank.png",
