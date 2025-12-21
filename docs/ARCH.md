@@ -163,6 +163,14 @@ Reliability and truthfulness take precedence over elegance or abstraction.
 
 ---
 
+## 6. Debugging & Observability
+
+- Plugin UI/runtime behavior should be treated as **embedded Chromium** semantics (rendering, lifecycle, timing).
+- During development, VSD Craft may expose a localhost Chromium DevTools endpoint for inspecting the running UI process.
+- See `docs/DEBUGGING.md` for the authoritative debugging workflow and constraints (LLMs reason over surfaced artifacts, not live runtime state).
+
+---
+
 ## 7. Platform Constraints & Known Limitations
 
 ### Stream Dock / VSD Text Rendering
