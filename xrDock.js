@@ -2,8 +2,8 @@
 // Stream Dock knob plugin: sends commands over WebSocket to a local Node bridge
 // that actually talks OSC to the XR18.
 
-console.log('XR18FX: plugin script loaded');
-console.log('XR18FX: typeof WebSocket =', typeof WebSocket);
+console.log('[PLUGIN] INIT script loaded');
+console.log('[PLUGIN] INIT WebSocket available:', typeof WebSocket);
 
 // Per-action-instance state
 //  - fxInstances: knob strips for FX returns
@@ -22,6 +22,9 @@ let bridgeSafeState = 'OFFLINE'; // OFFLINE | STALE | LIVE (from bridge)
 
 function setBridgeSafeState(next) {
   const changed = bridgeSafeState !== next;
+  if (changed) {
+    console.log('[PLUGIN] STATE bridgeSafeState', bridgeSafeState, '\u2192', next);
+  }
   bridgeSafeState = next;
   if (!changed) return;
 
@@ -62,12 +65,22 @@ const BRIDGE_URL = "ws://127.0.0.1:18018"; // Node bridge we will run separately
 
 const BRIDGE_RECONNECT_DELAY_MS = 1500;
 
+// ===== DEBUG FLAGS =====
 // Debug: forward a concise trace of raw Stream Dock input events to the bridge log.
+// Forwards event summaries (event, action, context, controller, coordinates, ticks, pressed) to bridge console.
 // Leave false for normal use.
 const DEBUG_SD_INPUT_EVENTS = true;
 
-// Debug: log every control message sent to the bridge (very noisy)
+// Debug: log every control message sent to the bridge (very noisy).
+// Logs all bridge.send() calls including fader updates, mute toggles, etc.
+// Enable only when debugging control message flow.
 const DEBUG_BRIDGE_SEND = false;
+
+// Debug: verbose DevTools event spy (Chromium DevTools console only).
+// Logs all incoming Stream Dock events with timestamps for empirical testing.
+// Filters out high-frequency events (dialRotate) by default to reduce noise.
+// Useful for investigating touchTap vs dialDown, event ordering, etc.
+const DEBUG_EVENT_SPY = false;
 
 function scheduleBridgeReconnect(delayMs) {
   if (bridgeReconnectTimer) {
@@ -88,11 +101,11 @@ function openBridgeWebSocket() {
     return;
   }
 
-  console.log('XR18FX: attempting bridge WebSocket connect', BRIDGE_URL);
+  console.log('[PLUGIN] WS connecting to bridge', BRIDGE_URL);
   try {
     bridgeSocket = new WebSocket(BRIDGE_URL);
   } catch (e) {
-    console.log('XR18FX: bridge WebSocket constructor failed', e);
+    console.log('[PLUGIN] WS ERROR constructor failed', e);
     setBridgeOnline(false);
     scheduleBridgeReconnect();
     return;
@@ -100,7 +113,7 @@ function openBridgeWebSocket() {
 
   bridgeSocket.onopen = () => {
     setBridgeOnline(true);
-    console.log('XR18FX: bridge WebSocket OPEN');
+    console.log('[PLUGIN] WS OPEN bridge connected');
     logViaBridge('bridge_open', {});
 
     // Conservative: assume STALE until the bridge explicitly reports LIVE.
@@ -138,7 +151,7 @@ function openBridgeWebSocket() {
   };
 
   bridgeSocket.onerror = (err) => {
-    console.log('XR18FX: bridge WebSocket ERROR', err);
+    console.log('[PLUGIN] WS ERROR', err);
     logViaBridge('bridge_error', { error: String(err) });
     setBridgeOnline(false);
     // onclose will handle scheduling reconnect
@@ -147,7 +160,7 @@ function openBridgeWebSocket() {
   bridgeSocket.onclose = () => {
     setBridgeOnline(false);
     setBridgeSafeState('OFFLINE');
-    console.log('XR18FX: bridge WebSocket CLOSED');
+    console.log('[PLUGIN] WS CLOSED bridge disconnected');
     logViaBridge('bridge_closed', {});
     scheduleBridgeReconnect();
   };
@@ -273,6 +286,10 @@ function openBridgeWebSocket() {
   };
 }
 
+// Forward a log message to the bridge for centralized logging.
+// Messages are received by bridge and can be viewed in bridge console.
+// Tag should be descriptive (e.g., 'sdEvent', 'bridge_open', 'dialDown_fx_tile').
+// Used by DEBUG_SD_INPUT_EVENTS and other debug paths.
 function logViaBridge(tag, payload) {
   if (!bridgeSocket || bridgeSocket.readyState !== WebSocket.OPEN) return;
   try {
@@ -287,7 +304,7 @@ function logViaBridge(tag, payload) {
 }
 
 function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, inInfo) {
-  console.log('XR18FX: connectElgatoStreamDeckSocket called', { inPort, inPluginUUID, inRegisterEvent });
+  console.log('[PLUGIN] INIT connectElgatoStreamDeckSocket port=', inPort, 'uuid=', inPluginUUID);
   logViaBridge('connectElgatoStreamDeckSocket', { inPort, inPluginUUID, inRegisterEvent });
   pluginUUID = inPluginUUID;
 
@@ -316,6 +333,22 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
 
     const event = msg.event;
     const actionUUID = msg.action;
+
+    // Event spy: log all incoming Stream Dock events for debugging.
+    // Single-line format for grep-ability; full msg object included for DevTools inspection.
+    if (DEBUG_EVENT_SPY) {
+      // Filter high-frequency events to reduce noise (dialRotate fires many times during rotation).
+      // To see all events including dialRotate, comment out the line below.
+      if (event === 'dialRotate') return;
+      
+      const timestamp = new Date().toISOString();
+      // Single-line format: grep-friendly and preserves all essential info
+      // Full msg object is logged separately for DevTools inspection (expandable object view)
+      console.log(
+        `[PLUGIN] EVENT ${event} time=${timestamp} action=${actionUUID || 'none'} context=${msg.context || 'none'}`,
+        msg
+      );
+    }
 
     if (DEBUG_SD_INPUT_EVENTS) {
       const p = msg.payload || {};
@@ -1272,7 +1305,7 @@ function updateChannelTitle(context) {
 
 function sendToBridge(msg) {
   if (DEBUG_BRIDGE_SEND) {
-    console.log('XR18FX: sendToBridge', msg, 'readyState=', bridgeSocket && bridgeSocket.readyState);
+    console.log('[PLUGIN] SEND', msg.type, 'readyState=', bridgeSocket && bridgeSocket.readyState);
   }
   logViaBridge('sendToBridge', msg);
   if (!bridgeSocket || bridgeSocket.readyState !== WebSocket.OPEN) return;
@@ -1289,7 +1322,7 @@ function sendToBridge(msg) {
   );
 
   if (isControlWrite && bridgeSafeState !== 'LIVE') {
-    console.log('XR18FX: blocked control write while', bridgeSafeState, msg.type);
+    console.log('[PLUGIN] SEND BLOCKED state=', bridgeSafeState, 'type=', msg.type);
     return;
   }
 

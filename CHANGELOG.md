@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased 0.6.0
+
+- XD-T005: Better logging and diagnostics. Standardized log message prefixes (`[PLUGIN]`, `[BRIDGE]`) for grep-ability across runs. Added high-frequency event filtering to event spy (dialRotate filtered by default). Enhanced debug flag documentation with clear noise levels and use cases. All Unicode characters in executable code use escapes per ARCH.md rules.- XD-F014: Clip indicator with hold at top of meter.
+
 ## v0.5.0 — FX assignment + fader feel + transport resilience
 
 - XD-F013: FX bus-assignment UI. FX tiles now support live routing to Buses A/B/C directly from the Stream Dock. Double-press enters Assign Mode, rotate cycles buses, and press toggles assignment to named bus.

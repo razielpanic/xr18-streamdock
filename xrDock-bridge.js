@@ -44,20 +44,33 @@ const {
   parseMessage,
 } = wsProtocol;
 
-// Debug flags (edit these booleans directly while developing)
-const DEBUG_OSC        = false; // logs raw OSC packets from XR18
-const DEBUG_WS         = false; // logs decoded WS objects (in addition to JSON line logs)
-// Logs every OSC control write we send to the XR18 (very noisy during knob moves)
-const DEBUG_OSC_SEND   = false;
+// ===== DEBUG FLAGS =====
+// Debug: log raw OSC packets received from XR18 mixer.
+// Shows address and arguments for all incoming OSC messages (low noise, useful for protocol investigation).
+const DEBUG_OSC = false;
 
-// JSON traffic bridge <-> plugin (high volume). Keep enabled but filtered by default.
-// Turn this off if the console is too noisy.
-const DEBUG_JSON       = false;
+// Debug: log decoded WebSocket message objects (in addition to JSON string logs).
+// Shows parsed message structure for plugin ↔ bridge communication.
+const DEBUG_WS = false;
 
-// Per-meter detailed logging (very high volume). Enable only when debugging meters.
-const DEBUG_METERS     = false;
+// Debug: log every OSC control write sent to XR18 mixer (very noisy).
+// Logs all fader writes, mute toggles, bus assignments during active use.
+// Enable only when debugging control message flow to mixer.
+const DEBUG_OSC_SEND = false;
 
-// Forwarded plugin {type:"log"} messages. Enable when you want to see input events (keyDown/dialDown).
+// Debug: log JSON traffic between plugin and bridge (high volume, filtered by default).
+// Filters out high-frequency events (meter updates, forwarded plugin logs).
+// Keep false for normal use; enables detailed protocol inspection when needed.
+const DEBUG_JSON = false;
+
+// Debug: per-meter detailed logging (very high volume).
+// Logs individual meter calculations (raw dB, normalized level, signal-present) for each FX/channel.
+// Enable only when debugging meter decoding or signal-present detection.
+const DEBUG_METERS = false;
+
+// Debug: log forwarded plugin {type:"log"} messages (medium noise).
+// Shows events forwarded from plugin via logViaBridge() (e.g., sdEvent summaries).
+// Enable when you want to see input events (keyDown/dialDown) in bridge console.
 const DEBUG_PLUGIN_LOG = false;
 
 // ---- T009: Connection / Safe-State (OFFLINE | STALE | LIVE) ----
@@ -107,6 +120,7 @@ function broadcastConnectionState(state) {
 function updateAndBroadcastSafeState(now) {
   const next = computeSafeState(now);
   if (next !== lastSafeState) {
+    console.log('[BRIDGE] STATE', lastSafeState, '\u2192', next);
     lastSafeState = next;
     broadcastConnectionState(next);
 
@@ -136,7 +150,7 @@ function scheduleStaleRecoveryOnce() {
     // Only attempt if we are still STALE (not OFFLINE, not already LIVE)
     if (lastSafeState !== SAFE_STALE) return;
 
-    console.log('[B002] STALE detected: one-shot recovery (reassert /xremotenfb + renew meters/1)');
+    console.log('[BRIDGE] STATE STALE recovery: reassert /xremotenfb + renew meters/1');
 
     try {
       // Reassert remote session + renew meters subscription
@@ -145,7 +159,7 @@ function scheduleStaleRecoveryOnce() {
       pollMeters();
     } catch (e) {
       // Never throw from recovery path
-      console.warn('[B002] Recovery attempt failed:', e && e.message ? e.message : e);
+      console.warn('[BRIDGE] STATE STALE recovery failed:', e && e.message ? e.message : e);
     }
   }, 250);
 }
@@ -167,8 +181,9 @@ function maySendControl() {
 // Recompute state on a steady cadence so UI flips to OFFLINE/STALE even if packets stop.
 setInterval(() => updateAndBroadcastSafeState(Date.now()), 250);
 
-// JSON flow logging helpers (plugin <-> bridge)
-// Filter high-frequency meter frames and forwarded plugin logs so the console remains usable.
+// JSON flow logging helpers (plugin <-> bridge).
+// Filters high-frequency events (meter updates, forwarded plugin logs) so console remains usable.
+// Used by logPluginToBridge() and logBridgeToPlugin() when DEBUG_JSON is enabled.
 function shouldLogJson(raw, direction) {
   if (!DEBUG_JSON) return false;
 
@@ -205,14 +220,18 @@ function shouldLogJson(raw, direction) {
   }
 }
 
+// Log JSON message sent from plugin to bridge (when DEBUG_JSON enabled, filtered by shouldLogJson).
+// Format: [PLUGIN → BRIDGE] <json-string>
 function logPluginToBridge(raw) {
   if (!shouldLogJson(raw, 'PLUGIN')) return;
-  console.log('[PLUGIN → BRIDGE]', raw);
+  console.log('[PLUGIN \u2192 BRIDGE]', raw);
 }
 
+// Log JSON message sent from bridge to plugin (when DEBUG_JSON enabled, filtered by shouldLogJson).
+// Format: [BRIDGE → PLUGIN] <json-string>
 function logBridgeToPlugin(raw) {
   if (!shouldLogJson(raw, 'BRIDGE')) return;
-  console.log('[BRIDGE → PLUGIN]', raw);
+  console.log('[BRIDGE \u2192 PLUGIN]', raw);
 }
 
 // XR18 network settings
@@ -629,7 +648,7 @@ function decodeMetersBlob(data) {
   } catch (e) {
     // Never let meter decoding throw and stall the OSC receive loop.
     if (DEBUG_METERS || DEBUG_OSC) {
-      console.warn('METER decode failed:', e && e.message ? e.message : e);
+      console.warn('[BRIDGE] METER decode failed:', e && e.message ? e.message : e);
     }
     return null;
   }
@@ -643,9 +662,9 @@ function handleOscPacket(buf) {
   const addr = msg.address;
   const args = msg.args || [];
 
-  // For debug: log everything coming from mixer
+  // Log raw OSC packets received from mixer (when DEBUG_OSC enabled)
   if (DEBUG_OSC) {
-    console.log('OSC RAW:', addr, args.map(a => a && a.value));
+    console.log('[BRIDGE] OSC RECV', addr, args.map(a => a && a.value));
   }
 
   // Handle meter blobs: meters/<set> (optionally with leading slash) with one blob argument
@@ -704,7 +723,7 @@ function handleOscPacket(buf) {
         const signalPresent = Number.isFinite(db) && db > SIGNAL_PRESENT_THRESHOLD_DB;
 
         if (DEBUG_METERS) {
-          console.log(`METER FX${fx}: raw=${raw} dB=${db.toFixed(1)} lvl=${level.toFixed(2)} signalPresent=${signalPresent}`);
+          console.log(`[BRIDGE] METER FX${fx} raw=${raw} dB=${db.toFixed(1)} lvl=${level.toFixed(2)} signalPresent=${signalPresent}`);
         }
 
         // Broadcast to plugin as a 'meter' kind; plugin can choose how to render
@@ -754,7 +773,7 @@ function handleOscPacket(buf) {
       if (name.length > 0) {
         busNames[busIndex] = name;
         if (DEBUG_OSC) {
-          console.log('OSC REPLY BUS NAME:', addr, name);
+          console.log('[BRIDGE] OSC RECV BUS NAME', addr, name);
         }
         broadcastBusNamesToAllFx();
       }
@@ -770,7 +789,7 @@ function handleOscPacket(buf) {
       const nameArg = args[0];
       const name = String(nameArg && nameArg.value ? nameArg.value : '').trim();
       if (DEBUG_OSC) {
-        console.log('OSC REPLY NAME:', addr, name);
+        console.log('[BRIDGE] OSC RECV NAME', addr, name);
       }
       broadcastState({
         fx: fxName,
@@ -789,7 +808,7 @@ function handleOscPacket(buf) {
       const nameArg = args[0];
       const name = String(nameArg && nameArg.value ? nameArg.value : '').trim();
       if (DEBUG_OSC) {
-        console.log('OSC REPLY CH NAME:', addr, name);
+        console.log('[BRIDGE] OSC RECV CH NAME', addr, name);
       }
 
       // Update registry
@@ -818,7 +837,7 @@ function handleOscPacket(buf) {
       const muted = (raw === 0); // XR18: 1 = ON (unmuted), 0 = muted
 
       if (DEBUG_OSC) {
-        console.log('OSC REPLY CH MUTE:', addr, raw);
+        console.log('[BRIDGE] OSC RECV CH MUTE', addr, raw);
       }
 
       const existing = channelTargets.find(
@@ -855,7 +874,7 @@ function handleOscPacket(buf) {
     const assigned = (raw === 1);
 
     if (DEBUG_OSC) {
-      console.log('OSC REPLY BUS ASSIGN:', addr, raw, 'assigned=', assigned);
+      console.log('[BRIDGE] OSC RECV BUS ASSIGN', addr, raw, 'assigned=', assigned);
     }
 
     // Map bus index to bus letter (01=A, 03=B, 05=C)
@@ -888,7 +907,7 @@ function handleOscPacket(buf) {
     if (!Number.isFinite(value)) return;
 
     if (DEBUG_OSC) {
-      console.log('OSC REPLY FADER:', addr, value);
+      console.log('[BRIDGE] OSC RECV FADER', addr, value);
     }
     broadcastState({
       fx,
@@ -902,7 +921,7 @@ function handleOscPacket(buf) {
     const muted = (raw === 0);
 
     if (DEBUG_OSC) {
-      console.log('OSC REPLY MUTE:', addr, raw);
+      console.log('[BRIDGE] OSC RECV MUTE', addr, raw);
     }
     broadcastState({
       fx,
@@ -915,7 +934,7 @@ function handleOscPacket(buf) {
 // UDP socket events
 udp.on('listening', () => {
   const addr = udp.address();
-  console.log(`OSC UDP listening on ${addr.address}:${addr.port}, target ${XR18_IP}:${XR18_PORT}`);
+  console.log(`[BRIDGE] OSC UDP listening ${addr.address}:${addr.port} target ${XR18_IP}:${XR18_PORT}`);
   subscribeMeters();
 
   // Ask mixer to send remote updates using the same flavor as X-Air Edit
@@ -945,7 +964,7 @@ udp.on('message', (msg /*, rinfo */) => {
 });
 
 udp.on('error', (err) => {
-  console.error('UDP error:', err);
+  console.error('[BRIDGE] OSC UDP ERROR', err);
 });
 
 // Bind UDP socket to our fixed local port
@@ -953,7 +972,7 @@ udp.bind(LOCAL_OSC_PORT);
 
 // WebSocket handling for plugin messages
 wss.on('connection', (ws) => {
-  console.log('BRIDGE: plugin WebSocket connected');
+  console.log('[BRIDGE] WS OPEN plugin connected');
   // Send current safe-state immediately on connect
   updateAndBroadcastSafeState(Date.now());
   broadcastConnectionState(lastSafeState);
@@ -1011,7 +1030,7 @@ wss.on('connection', (ws) => {
     }
 
     if (DEBUG_WS) {
-      console.log('BRIDGE RECEIVED:', msg);
+      console.log('[BRIDGE] WS RECV', msg);
     }
 
     // ---- T009 Safe-state gate: block control writes unless LIVE ----
@@ -1113,7 +1132,7 @@ wss.on('connection', (ws) => {
         // XR18: /mix/on = 1 → channel ON (unmuted), 0 → channel muted
         const xrOn = nextMuted ? 0 : 1;
 
-        if (DEBUG_OSC_SEND) console.log('SEND OSC CH MUTE:', `/ch/${chId}/mix/on`, xrOn);
+        if (DEBUG_OSC_SEND) console.log('[BRIDGE] OSC SEND CH MUTE', `/ch/${chId}/mix/on`, xrOn);
         sendOscInt(`/ch/${chId}/mix/on`, xrOn);
 
         existing.muted = nextMuted;
@@ -1138,7 +1157,7 @@ wss.on('connection', (ws) => {
       if (v < 0) v = 0;
       if (v > 1) v = 1;
 
-      if (DEBUG_OSC_SEND) console.log('SEND OSC FADER:', fxPath(fx, 'mix/fader'), v);
+      if (DEBUG_OSC_SEND) console.log('[BRIDGE] OSC SEND FADER', fxPath(fx, 'mix/fader'), v);
       sendOscFloat(fxPath(fx, 'mix/fader'), v);
 
       // Echo state immediately so UI feels responsive
@@ -1160,7 +1179,7 @@ wss.on('connection', (ws) => {
       // /mix/on = 0 → channel muted
       const xrOn = muted ? 0 : 1;
 
-      if (DEBUG_OSC_SEND) console.log('SEND OSC MUTE:', fxPath(fx, 'mix/on'), xrOn);
+      if (DEBUG_OSC_SEND) console.log('[BRIDGE] OSC SEND MUTE', fxPath(fx, 'mix/on'), xrOn);
       sendOscInt(fxPath(fx, 'mix/on'), xrOn);
 
       // Echo mute state immediately using plugin-style boolean
@@ -1186,7 +1205,7 @@ wss.on('connection', (ws) => {
       const xrValue = assigned ? 1 : 0;
 
       const busPath = `/rtn/${fx}/mix/${String(busIndex).padStart(2, '0')}/grpon`;
-      if (DEBUG_OSC_SEND) console.log('SEND OSC BUS ASSIGN:', busPath, xrValue);
+      if (DEBUG_OSC_SEND) console.log('[BRIDGE] OSC SEND BUS ASSIGN', busPath, xrValue);
       sendOscInt(busPath, xrValue);
 
       // Echo bus assignment state immediately
@@ -1207,7 +1226,7 @@ wss.on('connection', (ws) => {
       if (v < 0) v = 0;
       if (v > 1) v = 1;
 
-      if (DEBUG_OSC_SEND) console.log('SEND OSC FADER:', fxPath(msg.fx, 'mix/fader'), v);
+      if (DEBUG_OSC_SEND) console.log('[BRIDGE] OSC SEND FADER', fxPath(msg.fx, 'mix/fader'), v);
       sendOscFloat(fxPath(msg.fx, 'mix/fader'), v);
 
       // Echo state immediately so UI feels responsive
@@ -1223,7 +1242,7 @@ wss.on('connection', (ws) => {
       // /mix/on = 0 → channel muted
       const xrOn = muted ? 0 : 1;
 
-      if (DEBUG_OSC_SEND) console.log('SEND OSC MUTE:', fxPath(msg.fx, 'mix/on'), xrOn);
+      if (DEBUG_OSC_SEND) console.log('[BRIDGE] OSC SEND MUTE', fxPath(msg.fx, 'mix/on'), xrOn);
       sendOscInt(fxPath(msg.fx, 'mix/on'), xrOn);
 
       // Echo mute state immediately using plugin-style boolean
@@ -1236,4 +1255,4 @@ wss.on('connection', (ws) => {
   });
 });
 
-console.log(`XR18 OSC bridge WebSocket listening on ws://127.0.0.1:${BRIDGE_PORT}`);
+console.log(`[BRIDGE] WS listening ws://127.0.0.1:${BRIDGE_PORT}`);
