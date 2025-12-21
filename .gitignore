@@ -20,3 +20,6 @@ build/
 **/xcuserdata/
 *.xcuserstate
 *.xcbkptlist
+
+# External repos for reference
+/docs/vendor/ref-only/
