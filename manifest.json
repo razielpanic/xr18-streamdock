@@ -11,7 +11,7 @@
     {
       "UUID": "com.youshriek.xr18fx",
       "Name": "XR18 Control Knob",
-      "Controllers": ["Knob"],
+      "Controllers": ["Knob", "Keypad"],
       "States": [
         {
           "Image": "blank.png"
