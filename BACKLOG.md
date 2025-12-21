@@ -10,7 +10,7 @@ Prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup P4= I don't know why w
 
 | ID      | Title                                           | Pr | Type | Notes |
 |---------|-------------------------------------------------|----|------|-------|
-| XD-B001 | (placeholder)                                   | P3 |      | Keep as a template row; do not delete. |
+| XD-F014 | Clip indicator with hold at top of meter        | P2 | Feature | From backlog. Activated. |
 
 ## 2. Feature backlog
 
@@ -35,7 +35,6 @@ Capture what you expected, what actually happened, and how to reproduce.
 
 | ID      | Title                                           | Pr | Depends | Notes |
 |---------|-------------------------------------------------|----|---------|-------|
-| XD-T005 | Better logging and diagnostics                  | P2 |         | Structured logs for OSC and WebSocket traffic + connection state, with configurable log levels. |
 | XD-T006 | Unit tests around meter decoding                | P2 |         | Sample `/meters/1` blobs mapped to expected per-channel levels to guard against regressions. |
 | XD-T007 | Refactor bridge into smaller modules            | P2 |         | Split bridge into OSC transport, WebSocket transport, protocol/schema, and app entrypoint modules. |
 | XD-T008 | `oscProtocol` separation and validation         | P2 |         | Centralize XR18 OSC message construction/parsing in an `oscProtocol` module and align with `wsProtocol` schemas; single validation point instead of ad-hoc shapes. |
@@ -47,6 +46,7 @@ Capture what you expected, what actually happened, and how to reproduce.
 
 ## 5. Done (for future changelog)
 
+- 2025-12-18 – XD-T005: Better logging and diagnostics. Standardized log message prefixes (`[PLUGIN]`, `[BRIDGE]`) for grep-ability. Added high-frequency event filtering to event spy (dialRotate filtered by default). Enhanced debug flag documentation. All Unicode characters in log strings use escapes per ARCH.md rules.
 - 2025-12-18 – XD-F013: FX bus-assignment UI. FX tiles support live routing to Buses A/B/C via Assign Mode (double-tap to enter, turn to cycle, knob press to toggle + exit, safe timeout).
 - 2025-12-18 – XD-F005: Knob acceleration curve overhaul. FX fader control moved to dB-domain with 0.1 dB precision near unity, smooth speed-based acceleration, stabilized multi-tick handling, and predictable behavior across the full range.
 - 2025-12-18 – XD-B003: FX fader dB scale correction. Fixed FX return fader display range to match X-Air Edit exactly (−∞ to +10 dB), including correct unity behavior.
