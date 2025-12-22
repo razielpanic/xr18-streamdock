@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased 0.6.0
+## 0.6.0 Unreleased
 
-- XD-T005: Better logging and diagnostics. Standardized log message prefixes (`[PLUGIN]`, `[BRIDGE]`) for grep-ability across runs. Added high-frequency event filtering to event spy (dialRotate filtered by default). Enhanced debug flag documentation with clear noise levels and use cases. All Unicode characters in executable code use escapes per ARCH.md rules.- XD-F014: Clip indicator with hold at top of meter.
+- XD-F014: Clip indicator with hold at top of meter. Displays `!` glyph at end of meter bar when clipping detected (local inference: raw meter value >= -1, equivalent to dB >= -0.0039). Holds for 10 seconds after last clipping detection, then auto-clears. Applies to all meter types (Channel Button, FX tiles). Clip indicator persists during OFFLINE state but clears on recovery.
+- XD-T005: Better logging and diagnostics. Standardized log message prefixes (`[PLUGIN]`, `[BRIDGE]`) for grep-ability across runs. Added high-frequency event filtering to event spy (dialRotate filtered by default). Enhanced debug flag documentation with clear noise levels and use cases. All Unicode characters in executable code use escapes per ARCH.md rules.
 
 ## v0.5.0 — FX assignment + fader feel + transport resilience
 

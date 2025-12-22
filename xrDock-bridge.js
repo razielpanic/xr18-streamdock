@@ -66,7 +66,7 @@ const DEBUG_JSON = false;
 // Debug: per-meter detailed logging (very high volume).
 // Logs individual meter calculations (raw dB, normalized level, signal-present) for each FX/channel.
 // Enable only when debugging meter decoding or signal-present detection.
-const DEBUG_METERS = false;
+const DEBUG_METERS = true;
 
 // Debug: log forwarded plugin {type:"log"} messages (medium noise).
 // Shows events forwarded from plugin via logViaBridge() (e.g., sdEvent summaries).
@@ -266,6 +266,12 @@ const KEY_METER_FLOOR_DB = -60;
 // Must be below both FX and channel visual floors to be useful
 const SIGNAL_PRESENT_THRESHOLD_DB = -80;
 
+// XD-F014: Clip detection threshold (0 dB = digital clipping)
+const CLIP_THRESHOLD_DB = 0.0;
+
+// XD-F014: Clip indicator hold duration (ms) - auto-clear after 10 seconds of no clipping
+const CLIP_HOLD_MS = 10000;
+
 // Create single UDP socket
 const udp = dgram.createSocket('udp4');
 
@@ -286,6 +292,13 @@ function pad2(n) {
 // Registered channel button targets (for Channel Button action)
 // Each entry: { targetType: "ch", targetIndex: 1, muted?: bool, name?: string }
 const channelTargets = [];
+
+// XD-F014: Clip state tracking - track when clip was last detected per FX/channel
+// Format: { fx: { 1: timestamp, 2: timestamp, ... }, ch: { 1: timestamp, 2: timestamp, ... } }
+const clipDetectedAt = {
+  fx: {},  // fx index -> timestamp (ms)
+  ch: {},  // channel index -> timestamp (ms)
+};
 
 // Mixbus display names (your convention stores stereo-pair names on the 2nd bus of each pair)
 // We read /bus/2,/bus/4,/bus/6 config names and forward them to FX tiles as busAName/busBName/busCName.
@@ -483,6 +496,13 @@ function broadcastState(state) {
     } else {
       msg.signalPresent = false;
     }
+    // XD-F014: Clip indicator: only include if explicitly provided and valid
+    // Defaults to false if missing/invalid (stale/unknown/degraded state)
+    if (typeof state.clip === 'boolean') {
+      msg.clip = state.clip;
+    } else {
+      msg.clip = false;
+    }
   }
   if (state.kind === 'busA' && typeof state.busA === 'boolean') {
     msg.busA = state.busA;
@@ -536,6 +556,11 @@ function broadcastChannelState(state) {
   // Do not include for name/mute updates to avoid overwriting previous signalPresent value
   if (typeof state.signalPresent === 'boolean') {
     msg.signalPresent = state.signalPresent;
+  }
+  // XD-F014: Clip indicator: only include when explicitly provided (meter updates)
+  // Do not include for name/mute updates to avoid overwriting previous clip value
+  if (typeof state.clip === 'boolean') {
+    msg.clip = state.clip;
   }
 
   const payload = JSON.stringify(msg);
@@ -709,8 +734,9 @@ function handleOscPacket(buf) {
 
         const rawL = values[iL];
         let raw = rawL;
+        let rawR = null;
         if (iR < values.length) {
-          const rawR = values[iR];
+          rawR = values[iR];
           raw = Math.max(rawL, rawR);
         }
 
@@ -722,8 +748,23 @@ function handleOscPacket(buf) {
         // Only true when we have valid meter data and signal is present
         const signalPresent = Number.isFinite(db) && db > SIGNAL_PRESENT_THRESHOLD_DB;
 
+        // XD-F014: Clip detection - detect when either channel raw >= -1 (very near or at 0 dB)
+        // XR18 may report "at 0 dB" as raw=-1 (-0.0039 dB), so check for raw >= -1 to catch clipping
+        // For stereo pairs, check both L and R channels - if either clips, show indicator
+        const now = Date.now();
+        const leftClip = Number.isFinite(rawL) && rawL >= -1;
+        const rightClip = (rawR !== null && Number.isFinite(rawR) && rawR >= -1);
+        if (leftClip || rightClip) {
+          // Update clip timestamp when clipping detected on either channel
+          clipDetectedAt.fx[fx] = now;
+        }
+        // Check if clip should still be shown (within 10-second hold window)
+        const clipTimestamp = clipDetectedAt.fx[fx] || 0;
+        const clipAge = now - clipTimestamp;
+        const clip = clipTimestamp > 0 && clipAge < CLIP_HOLD_MS;
+
         if (DEBUG_METERS) {
-          console.log(`[BRIDGE] METER FX${fx} raw=${raw} dB=${db.toFixed(1)} lvl=${level.toFixed(2)} signalPresent=${signalPresent}`);
+          console.log(`[BRIDGE] METER FX${fx} raw=${raw} dB=${db.toFixed(1)} lvl=${level.toFixed(2)} signalPresent=${signalPresent} clip=${clip}`);
         }
 
         // Broadcast to plugin as a 'meter' kind; plugin can choose how to render
@@ -731,7 +772,8 @@ function handleOscPacket(buf) {
           fx,
           kind: 'meter',
           value: level,
-          signalPresent
+          signalPresent,
+          clip
         });
       });
 
@@ -751,11 +793,24 @@ function handleOscPacket(buf) {
         // Only true when we have valid meter data and signal is present
         const signalPresent = Number.isFinite(db) && db > SIGNAL_PRESENT_THRESHOLD_DB;
 
+        // XD-F014: Clip detection - detect when raw >= 0 (which means dB >= 0.0, digital clipping)
+        // Check raw value directly to avoid floating-point precision issues
+        const now = Date.now();
+        if (Number.isFinite(raw) && raw >= 0) {
+          // Update clip timestamp when clipping detected
+          clipDetectedAt.ch[chIdx] = now;
+        }
+        // Check if clip should still be shown (within 10-second hold window)
+        const clipTimestamp = clipDetectedAt.ch[chIdx] || 0;
+        const clipAge = now - clipTimestamp;
+        const clip = clipTimestamp > 0 && clipAge < CLIP_HOLD_MS;
+
         broadcastChannelState({
           targetType: 'ch',
           targetIndex: chIdx,
           meter: level,
-          signalPresent
+          signalPresent,
+          clip
         });
       });
 

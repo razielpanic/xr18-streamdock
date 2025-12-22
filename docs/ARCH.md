@@ -36,6 +36,44 @@ For workflow rules and completion gates, see .cursor/assistant.md.
 
 ### Entries
 
+### XD-F014 for v0.6.0— Clip indicator with hold
+**Context**
+- XR18 OSC protocol does not provide explicit clip/overload flags in meter data.
+- Users need visual feedback when channels/FX are clipping.
+- Clip indicators should persist briefly after clipping stops to ensure visibility.
+
+**Decision**
+- Implement clip detection via local inference: detect when raw meter value `>= -1` (equivalent to dB >= -0.0039, effectively at 0 dB threshold).
+- For stereo FX returns, check both L and R channels independently - if either clips, show indicator.
+- Display clip indicator as `"!"` glyph at the END of the meter bar (top of visual meter).
+- Hold clip indicator for 10 seconds after last clipping detection, then auto-clear.
+- Format: `"::::....!"` when clipping (clip indicator at end), vs `"::::•..."` for signal-present (bullet in middle).
+- Apply to all meter types (Channel Button, FX tiles, future tile types).
+
+**Rationale**
+- Local inference is necessary since protocol doesn't provide clip flags.
+- 0 dB threshold aligns with standard digital audio clipping definition.
+- 10-second hold ensures brief clipping events are visible.
+- End-of-bar placement (top of visual meter) is intuitive and doesn't conflict with signal-present indicator placement.
+
+**Invariants Preserved**
+- XR18 remains the single source of truth for meter data.
+- Clip detection is derived from meter data, not inferred from UI state.
+- Meter rendering logic remains isolated and testable.
+
+**Confirmed Facts**
+- XR18 meter values are 16-bit signed integers in 1/256 dB units.
+- Values `>= -1` (raw) effectively indicate clipping (raw=-1 = -0.0039 dB, very near 0 dB threshold).
+- For stereo FX returns, checking both L and R channels independently ensures clipping on either channel is detected.
+- Signal-present indicator uses `•` character in middle of meter bar.
+- Clip indicator uses `!` character at end of meter bar.
+- Clip indicator persists during OFFLINE state (acceptable since display shows "OFFLINE" clearly) and clears on recovery.
+
+**Deferred / Open**
+- None.
+
+---
+
 ### v0.5.0 — FX control ergonomics and minimal transport recovery
 **Context**
 - FX returns require live routing changes without relying on X-Air Edit.
@@ -90,7 +128,6 @@ For workflow rules and completion gates, see .cursor/assistant.md.
 **Deferred / Open**
 - Automatic transport-level recovery is tracked separately (see XD-B002).
 
----
 
 ## 1. System Overview
 

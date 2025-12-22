@@ -10,13 +10,8 @@ Prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup P4= I don't know why w
 
 | ID      | Title                                           | Pr | Type | Notes |
 |---------|-------------------------------------------------|----|------|-------|
-| XD-F014 | Clip indicator with hold at top of meter        | P2 | Feature | From backlog. Activated. |
 
 ## 2. Feature backlog
-
-| ID      | Title                                           | Pr | Depends | Notes |
-|---------|-------------------------------------------------|----|---------|-------|
-| XD-F014 | Clip indicator with hold at top of meter        | P2 |         | Display a clip indicator when XR18 reports clip/over. Indicator appears at the top of the meter as a single `!` glyph and holds for a fixed 5 seconds before clearing automatically. Applies to all meters (Channel, FX, future tile types). Driven by XR18-provided clip/over data (no local inference). Needs protocol confirmation that XR18 exposes a clip/over flag in the meter data we already decode; if not available, revise to a local inference strategy. |
 | XD-F006 | Per-action settings UI                          | P3 |         | For each action: source selector (Ch 1–18, Bus, FX), label override, meter mode (normal/raised-floor/peaks). |
 | XD-F007 | Global settings UI                              | P3 |         | Bridge host/port, meter update rate,skin, meter style, type size if accessible |
 | XD-F001 | Finish tile channel configuration               | P3 | XD-T010 | User-facing feature: tiles (Channel, FX, future types) can target any XR18 source with persistent mapping; uses shared config plumbing (XD-T010). |
@@ -46,6 +41,7 @@ Capture what you expected, what actually happened, and how to reproduce.
 
 ## 5. Done (for future changelog)
 
+- 2025-01-XX – XD-F014: Clip indicator with hold at top of meter. Displays `!` glyph at end of meter bar when clipping detected (local inference: raw meter value >= -1, equivalent to dB >= -0.0039). Holds for 10 seconds after last clipping detection, then auto-clears. Applies to all meter types (Channel Button, FX tiles). Clip indicator persists during OFFLINE state but clears on recovery.
 - 2025-12-18 – XD-T005: Better logging and diagnostics. Standardized log message prefixes (`[PLUGIN]`, `[BRIDGE]`) for grep-ability. Added high-frequency event filtering to event spy (dialRotate filtered by default). Enhanced debug flag documentation. All Unicode characters in log strings use escapes per ARCH.md rules.
 - 2025-12-18 – XD-F013: FX bus-assignment UI. FX tiles support live routing to Buses A/B/C via Assign Mode (double-tap to enter, turn to cycle, knob press to toggle + exit, safe timeout).
 - 2025-12-18 – XD-F005: Knob acceleration curve overhaul. FX fader control moved to dB-domain with 0.1 dB precision near unity, smooth speed-based acceleration, stabilized multi-tick handling, and predictable behavior across the full range.

@@ -43,6 +43,7 @@ const MSG_ERROR = 'error';
  *   name?: string,               // (partial updates: only included when changed)
  *   meter?: number,              // 0.0–1.0 normalized level (partial updates: only included when changed)
  *   signalPresent?: boolean,     // true when signal > -80 dB threshold (only included with meter updates)
+ *   clip?: boolean,              // true when meter dB >= 0.0 (clipping detected, held for 10s) (only included with meter updates)
  *   busA?: boolean,              // FX Return → Bus A (mixbus 01) assignment (only included when changed)
  *   busB?: boolean,              // FX Return → Bus B (mixbus 03) assignment (only included when changed)
  *   busC?: boolean               // FX Return → Bus C (mixbus 05) assignment (only included when changed)
@@ -53,7 +54,8 @@ const MSG_ERROR = 'error';
  *   muted?: boolean,             // (optional: only included when changed)
  *   meter?: number,              // 0.0–1.0 normalized level (optional: only included when changed)
  *   name?: string,               // (optional: only included when changed)
- *   signalPresent?: boolean      // true when signal > -80 dB threshold (optional: only included with meter updates)
+ *   signalPresent?: boolean,     // true when signal > -80 dB threshold (optional: only included with meter updates)
+ *   clip?: boolean               // true when meter dB >= 0.0 (clipping detected, held for 10s) (optional: only included with meter updates)
  * }
  * { type: 'metersFrame',
  *   frameId: number,             // monotonically increasing
