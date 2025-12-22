@@ -223,6 +223,11 @@ function openBridgeWebSocket() {
           inst.signalPresent = msg.signalPresent;
         }
 
+        // XD-F014: Clip indicator
+        if (typeof msg.clip === "boolean") {
+          inst.clip = msg.clip;
+        }
+
         if (typeof msg.busA === "boolean") {
           inst.busA = msg.busA;
         }
@@ -277,6 +282,10 @@ function openBridgeWebSocket() {
         }
         if (typeof msg.signalPresent === "boolean") {
           inst.signalPresent = msg.signalPresent;
+        }
+        // XD-F014: Clip indicator
+        if (typeof msg.clip === "boolean") {
+          inst.clip = msg.clip;
         }
 
         updateChannelTitle(context);
@@ -457,6 +466,7 @@ function handleFxWillAppear(msg) {
     name: `FX${fx}`, // default label, overridden by mixer name if available
     meter: 0,       // 0.0..1.0 live signal level (from /meters/1)
     signalPresent: false, // true when signal exceeds noise floor threshold
+    clip: false,    // XD-F014: true when clipping detected (meter dB >= 0.0, held for 10s)
     busA: false,    // FX Return → Bus A (mixbus 01) assignment
     busB: false,    // FX Return → Bus B (mixbus 03) assignment
     busC: false,    // FX Return → Bus C (mixbus 05) assignment
@@ -1041,6 +1051,7 @@ function handleChannelConfigFromPI(msg) {
       muted: false,
       meter: 0,
       signalPresent: false,
+      clip: false,    // XD-F014: true when clipping detected (meter dB >= 0.0, held for 10s)
     };
     channelInstances.set(context, inst);
   } else {
@@ -1061,7 +1072,7 @@ function handleChannelConfigFromPI(msg) {
   updateChannelTitle(context);
 }
 
-function squareMeter(level, width = 8, signalPresent = false) {
+function squareMeter(level, width = 8, signalPresent = false, clip = false) {
   // Clamp level to [0,1]
   if (level < 0) level = 0;
   if (level > 1) level = 1;
@@ -1072,7 +1083,11 @@ function squareMeter(level, width = 8, signalPresent = false) {
   let meterBar = fullChar.repeat(filled) + emptyChar.repeat(empty);
   // Signal-present indicator: replace first "." with "•" when signal exceeds noise floor
   if (signalPresent && empty > 0) {
-    meterBar = fullChar.repeat(filled) + "\u2022" + emptyChar.repeat(empty - 1);
+    meterBar = fullChar.repeat(filled) + "!" + emptyChar.repeat(empty - 1);
+  }
+  // XD-F014: Clip indicator: append "!" at end (top of visual meter) when clipping
+  if (clip) {
+    meterBar = meterBar + "!";
   }
   return meterBar;
 }
@@ -1177,9 +1192,10 @@ function updateKnobTitle(context) {
   const faderRight = "-".repeat(Math.max(0, WIDTH_FADER - pos));
   const faderBar = `${faderLeft}+${faderRight}`;
 
-  // Live meter bar: ####.... (with signal-present indicator if applicable)
+  // Live meter bar: ####.... (with signal-present indicator if applicable, clip indicator at end)
   const signalPresent = typeof inst.signalPresent === "boolean" ? inst.signalPresent : false;
-  const meterBar = squareMeter(meter01, WIDTH_METER, signalPresent);
+  const clip = typeof inst.clip === "boolean" ? inst.clip : false;
+  const meterBar = squareMeter(meter01, WIDTH_METER, signalPresent, clip);
 
   // Build four lines:
   //  1: channel name (or assign mode prompt)
@@ -1280,7 +1296,8 @@ function updateChannelTitle(context) {
 
   const meter01 = typeof inst.meter === "number" ? inst.meter : 0;
   const signalPresent = typeof inst.signalPresent === "boolean" ? inst.signalPresent : false;
-  const meterBar = squareMeter(meter01, 16, signalPresent);
+  const clip = typeof inst.clip === "boolean" ? inst.clip : false;
+  const meterBar = squareMeter(meter01, 16, signalPresent, clip);
 
   const line1 = nameCore;
   const line2 = statusLine;
