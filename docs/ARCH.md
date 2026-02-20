@@ -36,6 +36,86 @@ For workflow rules and completion gates, see .cursor/assistant.md.
 
 ### Entries
 
+### XD-F015 — XR18 IP configuration via Property Inspector
+**Context**
+- XR18 IP address is currently hardcoded in `xrDock-bridge.js` as `192.168.1.37`.
+- IP addresses are usually dynamically assigned by DHCP and can change.
+- Hardcoded IP only works for the author's specific network configuration.
+- Users need a way to configure the XR18 IP address without modifying code.
+
+**Decision**
+- Remove hardcoded IP address entirely from `xrDock-bridge.js`.
+- Add Property Inspector UI for XR18 IP address entry (text input field).
+- Persist IP address to `config.json` file in plugin directory.
+- Bridge loads IP from config file on startup.
+- Fallback behavior: if config file missing or invalid, bridge logs error and shows NO IP on titles.
+- Property Inspector allows manual IP entry and saves to both plugin settings and config file.
+
+**Rationale**
+- Property Inspector provides user-friendly configuration without code edits.
+- Config file allows bridge to access IP independently of plugin settings.
+- Removing hardcoded IP ensures feature works for all users, not just author.
+- Explicit failure (no default) prevents silent misconfiguration.
+
+**Invariants Preserved**
+- Bridge startup sequence unchanged (load config before binding UDP socket).
+- OSC protocol and session management unchanged.
+- Plugin ↔ bridge WebSocket protocol unchanged.
+
+**Confirmed Facts**
+- Property Inspector can store settings via Stream Dock settings API.
+- Bridge can read JSON config file using Node.js `fs` module.
+- XR18 IP address format: IPv4 address (e.g., "192.168.1.34").
+
+**Deferred / Open**
+- Automatic IP discovery via OSC broadcast/scanning → see XD-F016.
+- Network change detection and re-discovery → see XD-F016.
+- Multiple XR18 device selection (deferred; single device assumption for v1.0).
+
+---
+
+### XD-F016 — XR18 Autodiscovery via `/xinfo` OSC broadcast
+**Context**
+- XR18 IP is currently hardcoded (or will be manually configured per XD-F015).
+- DHCP can change the mixer's IP; manual re-entry is friction.
+- XAir Edit finds the mixer automatically without user IP entry.
+- Protocol mechanism was unknown at time of XD-F015; now confirmed.
+
+**Decision**
+- Bridge broadcasts an OSC `/xinfo` packet to `255.255.255.255:10024` on startup when `config.json` contains `"ip": "auto"` (or no IP).
+- Mixer responds from its actual IP with `/xinfo`; bridge extracts `params[0]` (IP) and `params[2]` (model).
+- Discovered IP is cached back to `config.json` as a literal string for resilience.
+- Timeout is 5 seconds; on failure, bridge retries every 10 seconds and shows `"NO MIXER"` on tiles (distinct from `"OFFLINE"` which means mixer is known but not responding).
+- A `MSG_DISCOVERY_STATE` WS message (new, additive) carries `{ phase: "searching"|"found"|"failed", ip, model }` to the plugin.
+- Property Inspector gains a "Rediscover" button that triggers `MSG_TRIGGER_DISCOVERY`.
+- Manual IP entry in PI remains available as a hard override.
+
+**Rationale**
+- `/xinfo` broadcast is the confirmed mechanism used by XAir Edit (verified via xair-remote source).
+- Caching the discovered IP to `config.json` means normal restarts skip the broadcast; `"auto"` always re-scans.
+- Distinct `"NO MIXER"` vs `"OFFLINE"` display states preserve the "no silent failure" invariant.
+- Additive-only WS protocol changes avoid any regression risk.
+
+**Invariants Preserved**
+- OSC session management, safe-state machine, meter subscription — untouched.
+- Bridge ↔ Plugin WS protocol changes are additive only.
+- No hardcoded IP remains anywhere after this feature ships.
+- Control writes remain blocked until `SAFE_LIVE`; discovery phase is treated as OFFLINE for write gating.
+
+**Confirmed Facts**
+- OSC message: `/xinfo` broadcast to `255.255.255.255:10024`.
+- Reply params: `[0]` = IP string, `[2]` = model name (e.g. `"XR18"`), `[3]` = firmware.
+- Existing bridge UDP socket (port 62058) can be reused with `setBroadcast(true)`.
+- Source: [xair-remote `lib/xair.py`](https://github.com/peterdikant/xair-remote) `find_mixer()`.
+
+**Deferred / Open**
+- Auto-retry on DHCP change: should bridge re-run discovery automatically after sustained OFFLINE, or require manual "Rediscover" trigger? (unresolved — see `docs/autodiscovery-plan.md`)
+- Multiple X-Air devices on same subnet: pick first, filter by model, or surface selection UI? (unresolved — see `docs/autodiscovery-plan.md`)
+
+**Full implementation plan:** `docs/autodiscovery-plan.md`
+
+---
+
 ### XD-F014 for v0.6.0— Clip indicator with hold
 **Context**
 - XR18 OSC protocol does not provide explicit clip/overload flags in meter data.

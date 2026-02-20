@@ -1,4 +1,4 @@
-// xr18fx-bridge.js
+// xrDock-bridge.js
 // WebSocket <-> XR18 bridge using ONE UDP socket + minimal OSC encoder/decoder
 //
 // Requirements in this plugin folder:
@@ -13,7 +13,7 @@
 //
 // Run with (from plugin folder):
 //   cd /Users/razielpanic/Library/Application Support/HotSpot/StreamDock/plugins/com.youshriek.xr18fx.sdPlugin
-//   node xr18fx-bridge.js
+//   node xrDock-bridge.js
 //
 
 
@@ -66,7 +66,7 @@ const DEBUG_JSON = false;
 // Debug: per-meter detailed logging (very high volume).
 // Logs individual meter calculations (raw dB, normalized level, signal-present) for each FX/channel.
 // Enable only when debugging meter decoding or signal-present detection.
-const DEBUG_METERS = true;
+const DEBUG_METERS = false;
 
 // Debug: log forwarded plugin {type:"log"} messages (medium noise).
 // Shows events forwarded from plugin via logViaBridge() (e.g., sdEvent summaries).
@@ -235,7 +235,7 @@ function logBridgeToPlugin(raw) {
 }
 
 // XR18 network settings
-const XR18_IP   = '192.168.1.37';
+const XR18_IP   = '192.168.1.32';
 const XR18_PORT = 10024;
 
 // Local UDP port for our OSC socket (send + receive on this port)

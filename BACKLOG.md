@@ -1,4 +1,4 @@
-Prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup P4= I don't know why we need this, but GPT seems interested. P1-3= My rankings P5=Probably gonna kill this one P0= out of scope for release v1
+Prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup. P4 = I don't know why we need this, but GPT seems interested. P1–P3 = My rankings. P5 = Probably gonna kill this one. PX = neXt major rev (no priority yet; will be re-ranked for 2.0).
 
 ## Versioning rules (informal)
 
@@ -10,13 +10,15 @@ Prefixes: XD-F = feature, XD-B = bug, XD-T = tech/cleanup P4= I don't know why w
 
 | ID      | Title                                           | Pr | Type | Notes |
 |---------|-------------------------------------------------|----|------|-------|
+| XD-F015 | XR18 IP configuration via Property Inspector    | P1 |      | Replace hardcoded XR18 IP with user-configurable setting. Add Property Inspector UI for IP entry, persist to config.json, remove hardcoded IP entirely (cannot know user IPs in advance). Present error state if NO IP configured. |
 
 ## 2. Feature backlog
+| XD-F016 | XR18 autodiscovery via `/xinfo` OSC broadcast   | P2 | XD-F015 | Bridge broadcasts `/xinfo` to `255.255.255.255:10024`; mixer replies with its IP + model. Replaces hardcoded/manual IP entirely when `config.json` has `"ip":"auto"`. Discovered IP cached back to config. Tiles show `SEARCHING` / `NO MIXER` during discovery phase (distinct from `OFFLINE`). PI gets Rediscover button. Two open questions before coding: auto-retry on DHCP change, multi-device handling. Full plan: `docs/autodiscovery-plan.md`. |
 | XD-F006 | Per-action settings UI                          | P3 |         | For each action: source selector (Ch 1–18, Bus, FX), label override, meter mode (normal/raised-floor/peaks). |
 | XD-F007 | Global settings UI                              | P3 |         | Bridge host/port, meter update rate,skin, meter style, type size if accessible |
 | XD-F001 | Finish tile channel configuration               | P3 | XD-T010 | User-facing feature: tiles (Channel, FX, future types) can target any XR18 source with persistent mapping; uses shared config plumbing (XD-T010). |
 | XD-F009 | Configurable channel layout for FX type         | P5 | XD-F001 | Simple JSON or similar mapping so layout isn’t hard-coded (e.g. which XR18 source each tile represents). If fixed layouts are fine, you can skip this|
-| XD-F004 | Basic level faders for key inputs               | P0 |         | A page where encoders act as faders for mapped channels and buttons reflect ch info and bank switching or sends. |
+| XD-F004 | Basic level faders for key inputs               | PX |         | A page where encoders act as faders for mapped channels and buttons reflect ch info and bank switching or sends. |
 
 ## 3. Bugs / regressions
 
@@ -35,7 +37,7 @@ Capture what you expected, what actually happened, and how to reproduce.
 | XD-T008 | `oscProtocol` separation and validation         | P2 |         | Centralize XR18 OSC message construction/parsing in an `oscProtocol` module and align with `wsProtocol` schemas; single validation point instead of ad-hoc shapes. |
 | XD-T010 | Shared channel-config plumbing for all tiles    | P2 |         | Extract Channel Button mapping logic into a shared config module used by all tile types (Channel, FX, future fader pages). Supports XD-F001. |
 | XD-T011 | SVG tile rendering engine                       | P2 |         | Introduce a small rendering module that outputs per-tile SVG images (meters, pip strips, safe-state indicators) and sends them via setImage. Enables graphical bus pips for XD-F013 Phase 2 and future unified visual layouts. |
-| XD-T020 | Switch to bridge-less architecture (rev 2.0)    | P0 |         | Investigate collapsing SwiftBar bridge into Stream Dock plugin backend for public release. Goal: single install, no helper apps. Review SDK lifecycle, UDP/OSC feasibility, internal modularization, and distribution implications. See discussion re: internal backend vs external bridge. |
+| XD-T020 | Switch to bridge-less architecture (rev 2.0)    | PX |         | Investigate collapsing SwiftBar bridge into Stream Dock plugin backend for public release. Goal: single install, no helper apps. Review SDK lifecycle, UDP/OSC feasibility, internal modularization, and distribution implications. See discussion re: internal backend vs external bridge. |
 | XD-T004 | XR18 simulation mode                            | P5 |         | Optional mode where the bridge simulates `/meters/1` and basic channel state for development without the mixer. Only useful if you want to develop the plugin without the mixer turned on.| 
 | XD-T012 | Unicode box-drawing fader rendering experiment  | P3 |         | Replace current ASCII fader bar with higher-resolution Unicode box/half-block characters to achieve smoother, more analog-feeling fader motion. Applies to faders first (meters may follow later). Hard-coded as the default (no toggle). Font/glyph inconsistencies acceptable given single-device use. Exploratory/technical task. |
 
