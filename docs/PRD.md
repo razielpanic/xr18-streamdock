@@ -98,6 +98,7 @@ The product assumes **intentional use**, not casual discovery. Any consideration
 - Text-based meters and labels
 - Persistent channel configuration per button/action
 - Clear differentiation between known-good and degraded states
+- Property Inspector for XR18 IP address configuration
 
 ---
 
