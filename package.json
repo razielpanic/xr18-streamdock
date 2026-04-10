@@ -1,8 +1,8 @@
 {
-  "name": "com.youshriek.xr18fx.sdplugin",
+  "name": "xrDock",
   "version": "1.0.0",
   "description": "",
-  "main": "xr18fx.js",
+  "main": "xrDock.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

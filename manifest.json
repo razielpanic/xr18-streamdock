@@ -1,16 +1,16 @@
 {
-  "Name": "XR18 Control Surface",
-  "Author": "You Shriek",
+  "Name": "xrDock",
+  "Author": "Raziel Panic",
   "Version": "0.6.0",
-  "Description": "Control XR18 using buttons and rotary encoders",
-  "Category": "XR18",
+  "Description": "Minimalist mixer control surface using buttons and rotary encoders",
+  "Category": "Audio",
   "Icon": "blank.png",
   "SDKVersion": 1,
   "CodePath": "index.html",
   "Actions": [
     {
-      "UUID": "com.youshriek.xr18fx",
-      "Name": "XR18 Control Knob",
+      "UUID": "com.youshriek.xrdock.control.knob",
+      "Name": "xrDock Control Knob",
       "Controllers": ["Knob", "Keypad"],
       "States": [
         {
@@ -19,8 +19,8 @@
       ]
     },
     {
-      "UUID": "com.youshriek.xr18channel",
-      "Name": "XR18 Channel Button",
+      "UUID": "com.youshriek.xrdock.channel.button",
+      "Name": "xrDock Channel Button",
       "Controllers": ["Keypad"],
       "PropertyInspectorPath": "propertyInspector/channel/index.html",
       "States": [

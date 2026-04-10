@@ -1,4 +1,4 @@
-// xr18fx.js
+// xrDock.js
 // Stream Dock knob plugin: sends commands over WebSocket to a local Node bridge
 // that actually talks OSC to the XR18.
 
@@ -374,52 +374,52 @@ function connectElgatoStreamDeckSocket(inPort, inPluginUUID, inRegisterEvent, in
 
     switch (event) {
       case "willAppear":
-        if (actionUUID === "com.youshriek.xr18fx") {
+        if (actionUUID === "com.youshriek.xrdock.control.knob") {
           handleFxWillAppear(msg);
-        } else if (actionUUID === "com.youshriek.xr18channel") {
+        } else if (actionUUID === "com.youshriek.xrdock.channel.button") {
           handleChannelWillAppear(msg);
         }
         break;
       case "willDisappear":
-        if (actionUUID === "com.youshriek.xr18fx") {
+        if (actionUUID === "com.youshriek.xrdock.control.knob") {
           handleFxWillDisappear(msg);
-        } else if (actionUUID === "com.youshriek.xr18channel") {
+        } else if (actionUUID === "com.youshriek.xrdock.channel.button") {
           handleChannelWillDisappear(msg);
         }
         break;
       case "dialRotate":
-        if (actionUUID === "com.youshriek.xr18fx") {
+        if (actionUUID === "com.youshriek.xrdock.control.knob") {
           handleDialRotate(msg);
         }
         break;
       case "dialDown":
-        if (actionUUID === "com.youshriek.xr18fx") {
+        if (actionUUID === "com.youshriek.xrdock.control.knob") {
           // Physical knob presses use dialDown (per SDK)
           logViaBridge('dialDown_fx_tile', { context: msg.context, payload: msg.payload });
           handleDialDown(msg);
         }
         break;
       case "dialUp":
-        if (actionUUID === "com.youshriek.xr18fx") {
+        if (actionUUID === "com.youshriek.xrdock.control.knob") {
           handleDialUp(msg);
         }
         break;
       case "keyDown":
-        if (actionUUID === "com.youshriek.xr18channel") {
+        if (actionUUID === "com.youshriek.xrdock.channel.button") {
           handleChannelKeyDown(msg);
-        } else if (actionUUID === "com.youshriek.xr18fx") {
+        } else if (actionUUID === "com.youshriek.xrdock.control.knob") {
           // For knob controllers, keyDown is used for screen area taps (per SDK: taps are keyDown events)
           logViaBridge('keyDown_fx_tile', { context: msg.context, payload: msg.payload });
           handleFxKeyDown(msg);
         }
         break;
       case "didReceiveSettings":
-        if (actionUUID === "com.youshriek.xr18channel") {
+        if (actionUUID === "com.youshriek.xrdock.channel.button") {
           handleChannelDidReceiveSettings(msg);
         }
         break;
       case "sendToPlugin":
-        if (actionUUID === "com.youshriek.xr18channel") {
+        if (actionUUID === "com.youshriek.xrdock.channel.button") {
           handleChannelConfigFromPI(msg);
         }
         break;

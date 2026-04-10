@@ -96,7 +96,7 @@ function saveSettings() {
   // Tell the plugin immediately which channel to use
   piSocket.send(JSON.stringify({
     event: 'sendToPlugin',
-    action: 'com.youshriek.xr18channel',
+    action: 'com.youshriek.xrdock.channel.button',
     context: piUUID,
     payload: {
       type: 'channelConfig',

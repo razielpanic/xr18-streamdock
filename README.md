@@ -20,8 +20,7 @@ Use semantic-ish tags:
 - v0.3.x — xrDock rename + FX protocol (`fxState`) consolidation
 
 ## Files
-- `xr18fx.js` — plugin logic
-- `xr18channel.js` — channel button logic
-- `xr18fx-bridge.js` — Node.js OSC/WebSocket bridge
+- `xrDock.js` — plugin logic
+- `xrDock-bridge.js` — Node.js OSC/WebSocket bridge
 - `manifest.json` — plugin manifest
 
