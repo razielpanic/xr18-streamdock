@@ -1,7 +1,7 @@
 {
   "Name": "xrDock",
   "Author": "Raziel Panic",
-  "Version": "0.6.0",
+  "Version": "0.6.1",
   "Description": "Minimalist mixer control surface using buttons and rotary encoders",
   "Category": "Audio",
   "Icon": "blank.png",

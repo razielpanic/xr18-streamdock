@@ -627,10 +627,10 @@ function sendOscRenewMeters(set) {
 
 // Renew meter subscriptions; we only need /meters/1 for FX1–4 returns
 function pollMeters() {
-  const blocks = [1];
-  for (const set of blocks) {
-    sendOscRenewMeters(set);
-  }
+  // Send the full /meters subscribe packet rather than /renew so the subscription
+  // is re-established automatically if it was lost or never set up at startup.
+  const subBuf = encodeOscMessage('/meters', 'si', ['/meters/1', 40]);
+  udp.send(subBuf, 0, subBuf.length, XR18_PORT, XR18_IP);
 }
 
 //

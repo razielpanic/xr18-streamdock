@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 - Meter subscription self-healing
+
+- XD-B004: Fixed permanent OFFLINE state when bridge starts before the XR18 is reachable. `pollMeters()` now sends the full `/meters` subscribe packet every second instead of `/renew`, so the subscription re-establishes automatically on the next tick without requiring a bridge restart.
+
 ## 0.6.0 - Clip Hold indicator + better logging. Feature-complete for the author's workflow
 
 - XD-F014: Clip indicator with hold at top of meter. Displays `!` glyph at end of meter bar when clipping detected (local inference: raw meter value >= -1, equivalent to dB >= -0.0039). Holds for 10 seconds after last clipping detection, then auto-clears. Applies to all meter types (Channel Button, FX tiles). Clip indicator persists during OFFLINE state but clears on recovery.
